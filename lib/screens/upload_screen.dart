@@ -31,7 +31,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final _nameController = TextEditingController();
   final _introController = TextEditingController();
   final _tagController = TextEditingController();
-  List<String> _tags = [];
+  final List<String> _tags = [];
   Set<String> _selectedCollectionBids = {};
   int _permissionLevel = 0;
   bool _encrypt = true;
@@ -51,53 +51,58 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _pickImage() async {
-    // Android 上必须运行时请求 ACCESS_MEDIA_LOCATION 才能读到 EXIF GPS
-    if (Platform.isAndroid) {
-      await Permission.accessMediaLocation.request();
-      // 同时确保有相册读取权限
-      final photos = await Permission.photos.status;
-      if (!photos.isGranted && !photos.isLimited) {
-        await Permission.photos.request();
-      }
-    }
-
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        requestFullMetadata: true,
-      );
-    if (picked == null) return;
-
-    // 直接从 XFile 读取字节（Android 上会从原始 URI 读取，保留 EXIF）
-    final bytes = await picked.readAsBytes();
-
-    // 用字节写入临时文件供后续上传使用
-    final file = File(picked.path);
-
-    // XFile.lastModified() 在 Android 上读 content URI 的 DATE_MODIFIED，比文件系统时间准确
-    DateTime? xfileTime;
-    try {
-      xfileTime = await picked.lastModified();
-    } catch (_) {}
-
-    // 提取元数据：直接传字节给解析器，避免文件系统时间被污染
     final connProvider = context.read<ConnectionProvider>();
-    final meta = await UploadService(connProvider).extractMetaFromBytes(
-      bytes: bytes,
-      path: picked.path,
-      originalFile: file,
-      fallbackTime: xfileTime,
-    );
 
-    setState(() {
-      _selectedFile = file;
-      _previewBytes = bytes;
-      _photoTime = meta.timestamp;
-      _photoGps = meta.gps;
-      if (_nameController.text.isEmpty) {
-        _nameController.text = meta.name;
+    try {
+      // Android 上必须运行时请求 ACCESS_MEDIA_LOCATION 才能读到 EXIF GPS
+      if (Platform.isAndroid) {
+        await Permission.accessMediaLocation.request();
+        // 同时确保有相册读取权限
+        final photos = await Permission.photos.status;
+        if (!photos.isGranted && !photos.isLimited) {
+          await Permission.photos.request();
+        }
       }
-    });
+
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        requestFullMetadata: !Platform.isMacOS,
+      );
+      if (picked == null) return;
+
+      // 直接从 XFile 读取字节（Android 上会从原始 URI 读取，保留 EXIF）
+      final bytes = await picked.readAsBytes();
+
+      // 用字节写入临时文件供后续上传使用
+      final file = File(picked.path);
+
+      // XFile.lastModified() 在 Android 上读 content URI 的 DATE_MODIFIED，比文件系统时间准确
+      DateTime? xfileTime;
+      try {
+        xfileTime = await picked.lastModified();
+      } catch (_) {}
+
+      // 提取元数据：直接传字节给解析器，避免文件系统时间被污染
+      final meta = await UploadService(connProvider).extractMetaFromBytes(
+        bytes: bytes,
+        path: picked.path,
+        originalFile: file,
+        fallbackTime: xfileTime,
+      );
+
+      setState(() {
+        _selectedFile = file;
+        _previewBytes = bytes;
+        _photoTime = meta.timestamp;
+        _photoGps = meta.gps;
+        if (_nameController.text.isEmpty) {
+          _nameController.text = meta.name;
+        }
+      });
+    } catch (e) {
+      _showSnack('选择图片失败：$e');
+    }
   }
 
   Future<void> _upload() async {
@@ -110,7 +115,10 @@ class _UploadScreenState extends State<UploadScreen> {
       return;
     }
 
-    setState(() { _uploading = true; _status = '准备上传...'; });
+    setState(() {
+      _uploading = true;
+      _status = '准备上传...';
+    });
 
     try {
       final service = UploadService(context.read<ConnectionProvider>());
@@ -123,7 +131,9 @@ class _UploadScreenState extends State<UploadScreen> {
         tags: _tags,
         permissionLevel: _permissionLevel,
         encrypt: _encrypt,
-        onStatus: (s) { if (mounted) setState(() => _status = s); },
+        onStatus: (s) {
+          if (mounted) setState(() => _status = s);
+        },
       );
       if (!mounted) return;
       _showSnack('上传成功');
@@ -145,7 +155,9 @@ class _UploadScreenState extends State<UploadScreen> {
   void _addTag(String tag) {
     final t = tag.trim();
     if (t.isEmpty || _tags.contains(t)) return;
-    setState(() { _tags.add(t); });
+    setState(() {
+      _tags.add(t);
+    });
   }
 
   void _removeTag(String t) => setState(() => _tags.remove(t));
@@ -161,11 +173,17 @@ class _UploadScreenState extends State<UploadScreen> {
           autofocus: true,
           decoration: const InputDecoration(hintText: '输入标签名称'),
           textInputAction: TextInputAction.done,
-          onSubmitted: (v) { _addTag(v); Navigator.of(ctx).pop(); },
+          onSubmitted: (v) {
+            _addTag(v);
+            Navigator.of(ctx).pop();
+          },
         ),
         actions: [
           FilledButton(
-            onPressed: () { _addTag(_tagController.text); Navigator.of(ctx).pop(); },
+            onPressed: () {
+              _addTag(_tagController.text);
+              Navigator.of(ctx).pop();
+            },
             child: const Text('添加'),
           ),
         ],
@@ -201,7 +219,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 36, height: 4,
+                    width: 36,
+                    height: 4,
                     margin: const EdgeInsets.fromLTRB(0, 12, 0, 8),
                     decoration: BoxDecoration(
                       color: cs.outlineVariant,
@@ -212,8 +231,14 @@ class _UploadScreenState extends State<UploadScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('选择集合',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                      child: Text(
+                        '选择集合',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
                     ),
                   ),
                   ConstrainedBox(
@@ -224,25 +249,38 @@ class _UploadScreenState extends State<UploadScreen> {
                           ? [
                               Padding(
                                 padding: const EdgeInsets.all(24),
-                                child: Text('没有可用的集合', style: TextStyle(color: cs.onSurfaceVariant)),
+                                child: Text(
+                                  '没有可用的集合',
+                                  style: TextStyle(color: cs.onSurfaceVariant),
+                                ),
                               ),
                             ]
                           : collections.map((col) {
                               final isLinked = linked.contains(col.bid);
                               return ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                                leading: Icon(Icons.folder_rounded,
-                                    color: isLinked ? cs.primary : cs.onSurfaceVariant),
-                                title: Text(col.title ?? col.bid,
-                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                leading: Icon(
+                                  Icons.folder_rounded,
+                                  color: isLinked
+                                      ? cs.primary
+                                      : cs.onSurfaceVariant,
+                                ),
+                                title: Text(
+                                  col.title ?? col.bid,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 subtitle: Text(
                                   col.bid.length > 20
                                       ? '${col.bid.substring(0, 8)}…${col.bid.substring(col.bid.length - 4)}'
                                       : col.bid,
                                   style: TextStyle(
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
-                                      color: cs.onSurfaceVariant),
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                    color: cs.onSurfaceVariant,
+                                  ),
                                 ),
                                 trailing: Icon(
                                   isLinked
@@ -250,7 +288,9 @@ class _UploadScreenState extends State<UploadScreen> {
                                       : Icons.radio_button_unchecked_rounded,
                                   color: isLinked
                                       ? cs.primary
-                                      : cs.onSurfaceVariant.withValues(alpha: 0.5),
+                                      : cs.onSurfaceVariant.withValues(
+                                          alpha: 0.5,
+                                        ),
                                 ),
                                 onTap: () => toggle(col.bid),
                               );
@@ -281,8 +321,10 @@ class _UploadScreenState extends State<UploadScreen> {
               padding: EdgeInsets.only(right: 16),
               child: Center(
                 child: SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
             )
           else
@@ -310,17 +352,25 @@ class _UploadScreenState extends State<UploadScreen> {
               child: _previewBytes != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.memory(_previewBytes!,
-                          fit: BoxFit.cover, width: double.infinity),
+                      child: Image.memory(
+                        _previewBytes!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      ),
                     )
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_photo_alternate_outlined,
-                            size: 48, color: cs.onSurfaceVariant),
+                        Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 48,
+                          color: cs.onSurfaceVariant,
+                        ),
                         const SizedBox(height: 12),
-                        Text('点击选择图片',
-                            style: TextStyle(color: cs.onSurfaceVariant)),
+                        Text(
+                          '点击选择图片',
+                          style: TextStyle(color: cs.onSurfaceVariant),
+                        ),
                       ],
                     ),
             ),
@@ -353,7 +403,9 @@ class _UploadScreenState extends State<UploadScreen> {
             decoration: InputDecoration(
               labelText: '图片名称',
               hintText: '可选，默认使用文件名',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               prefixIcon: const Icon(Icons.title_rounded),
             ),
           ),
@@ -369,7 +421,9 @@ class _UploadScreenState extends State<UploadScreen> {
               labelText: '介绍',
               hintText: '可选',
               alignLabelWithHint: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               prefixIcon: const Padding(
                 padding: EdgeInsets.only(bottom: 40),
                 child: Icon(Icons.notes_rounded),
@@ -379,30 +433,41 @@ class _UploadScreenState extends State<UploadScreen> {
           const SizedBox(height: 20),
 
           // 标签
-          Text('标签',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+          Text(
+            '标签',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              letterSpacing: 0.5,
+            ),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              ..._tags.map((t) => Chip(
-                    label: Text(t,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onPrimaryContainer,
-                            fontWeight: FontWeight.w500)),
-                    deleteIcon: Icon(Icons.close_rounded,
-                        size: 13,
-                        color: cs.onPrimaryContainer.withValues(alpha: 0.6)),
-                    onDeleted: _uploading ? null : () => _removeTag(t),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    visualDensity: VisualDensity.compact,
-                    backgroundColor: cs.primaryContainer,
-                    side: BorderSide.none,
-                  )),
+              ..._tags.map(
+                (t) => Chip(
+                  label: Text(
+                    t,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  deleteIcon: Icon(
+                    Icons.close_rounded,
+                    size: 13,
+                    color: cs.onPrimaryContainer.withValues(alpha: 0.6),
+                  ),
+                  onDeleted: _uploading ? null : () => _removeTag(t),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: cs.primaryContainer,
+                  side: BorderSide.none,
+                ),
+              ),
               if (!_uploading)
                 _DashedChip(
                   label: '+ 添加标签',
@@ -414,25 +479,37 @@ class _UploadScreenState extends State<UploadScreen> {
           const SizedBox(height: 20),
 
           // 集合选择
-          Text('集合',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+          Text(
+            '集合',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              letterSpacing: 0.5,
+            ),
+          ),
           const SizedBox(height: 4),
           if (_selectedCollectionBids.isEmpty)
             GestureDetector(
-              onTap: _uploading ? null : () => _showCollectionSheet(collections),
+              onTap: _uploading
+                  ? null
+                  : () => _showCollectionSheet(collections),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.add_rounded,
-                        size: 14, color: cs.error.withValues(alpha: 0.8)),
+                    Icon(
+                      Icons.add_rounded,
+                      size: 14,
+                      color: cs.error.withValues(alpha: 0.8),
+                    ),
                     const SizedBox(width: 4),
-                    Text('必须选择至少一个集合',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: cs.error.withValues(alpha: 0.8))),
+                    Text(
+                      '必须选择至少一个集合',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.error.withValues(alpha: 0.8),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -446,66 +523,82 @@ class _UploadScreenState extends State<UploadScreen> {
                   .where((b) => !collections.any((c) => c.bid == b))
                   .toList();
               return [
-                ...selectedCols.map((col) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          Icon(Icons.folder_rounded,
-                              size: 15, color: cs.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(col.title ?? col.bid,
-                                    style: const TextStyle(fontSize: 14)),
-                                Text(
-                                  col.bid.length > 20
-                                      ? '${col.bid.substring(0, 8)}…${col.bid.substring(col.bid.length - 4)}'
-                                      : col.bid,
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
-                                      color: cs.onSurfaceVariant),
+                ...selectedCols.map(
+                  (col) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder_rounded, size: 15, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                col.title ?? col.bid,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              Text(
+                                col.bid.length > 20
+                                    ? '${col.bid.substring(0, 8)}…${col.bid.substring(col.bid.length - 4)}'
+                                    : col.bid,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                  color: cs.onSurfaceVariant,
                                 ),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                ...unknownBids.map(
+                  (bid) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(Icons.link_rounded, size: 15, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            bid,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontFamily: 'monospace',
+                              color: cs.onSurface,
                             ),
                           ),
-                        ],
-                      ),
-                    )),
-                ...unknownBids.map((bid) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          Icon(Icons.link_rounded,
-                              size: 15, color: cs.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(bid,
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontFamily: 'monospace',
-                                    color: cs.onSurface)),
-                          ),
-                        ],
-                      ),
-                    )),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ];
             }(),
             const SizedBox(height: 4),
             GestureDetector(
-              onTap: _uploading ? null : () => _showCollectionSheet(collections),
+              onTap: _uploading
+                  ? null
+                  : () => _showCollectionSheet(collections),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.edit_rounded,
-                      size: 14, color: cs.primary.withValues(alpha: 0.7)),
+                  Icon(
+                    Icons.edit_rounded,
+                    size: 14,
+                    color: cs.primary.withValues(alpha: 0.7),
+                  ),
                   const SizedBox(width: 4),
-                  Text('修改集合',
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: cs.primary.withValues(alpha: 0.7))),
+                  Text(
+                    '修改集合',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: cs.primary.withValues(alpha: 0.7),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -513,9 +606,13 @@ class _UploadScreenState extends State<UploadScreen> {
           const SizedBox(height: 20),
 
           // 权限等级
-          Text('权限等级',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+          Text(
+            '权限等级',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              letterSpacing: 0.5,
+            ),
+          ),
           const SizedBox(height: 8),
           _PermissionSelector(
             value: _permissionLevel,
@@ -530,7 +627,9 @@ class _UploadScreenState extends State<UploadScreen> {
             onChanged: _uploading ? null : (v) => setState(() => _encrypt = v),
             title: const Text('加密上传'),
             subtitle: const Text('使用 AES-GCM 加密文件内容'),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
             contentPadding: EdgeInsets.zero,
           ),
 
@@ -540,9 +639,10 @@ class _UploadScreenState extends State<UploadScreen> {
             Row(
               children: [
                 const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
                 const SizedBox(width: 12),
                 Text(_status, style: TextStyle(color: cs.onSurfaceVariant)),
               ],
@@ -579,8 +679,10 @@ class _PermissionSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final selected = _levels.firstWhere((l) => l.value == value,
-        orElse: () => _levels.first);
+    final selected = _levels.firstWhere(
+      (l) => l.value == value,
+      orElse: () => _levels.first,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,16 +696,17 @@ class _PermissionSelector extends StatelessWidget {
               onTap: enabled ? () => onChanged(level.value) : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? level.color.withValues(alpha: 0.12)
                       : cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isSelected
-                        ? level.color
-                        : cs.outlineVariant,
+                    color: isSelected ? level.color : cs.outlineVariant,
                     width: isSelected ? 1.5 : 1,
                   ),
                 ),
@@ -612,8 +715,9 @@ class _PermissionSelector extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     color: isSelected ? level.color : cs.onSurfaceVariant,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                 ),
               ),
@@ -646,8 +750,11 @@ class _PermissionSelector extends StatelessWidget {
 // ── 虚线边框 Chip（与 photo_detail_screen 一致）─────────────────
 
 class _DashedChip extends StatelessWidget {
-  const _DashedChip(
-      {required this.label, required this.color, required this.onTap});
+  const _DashedChip({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
   final String label;
   final Color color;
   final VoidCallback onTap;
@@ -680,7 +787,9 @@ class _DashedBorderPainter extends CustomPainter {
 
     const radius = Radius.circular(16);
     final rRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, size.height), radius);
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      radius,
+    );
 
     const dashWidth = 4.0;
     const dashSpace = 3.0;
@@ -690,7 +799,9 @@ class _DashedBorderPainter extends CustomPainter {
       double distance = 0;
       while (distance < metric.length) {
         canvas.drawPath(
-            metric.extractPath(distance, distance + dashWidth), paint);
+          metric.extractPath(distance, distance + dashWidth),
+          paint,
+        );
         distance += dashWidth + dashSpace;
       }
     }
@@ -724,10 +835,9 @@ class _MetaInfoRow extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             label,
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(width: 8),
           Expanded(

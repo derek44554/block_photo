@@ -54,9 +54,17 @@ class _PhotoGridItemState extends State<PhotoGridItem>
 
   Future<void> _load() async {
     // 先检查内存缓存，命中则直接显示无需等待
-    final mem = ImageCacheHelper.getMemoryImage(widget.photo.cid, variant: ImageVariant.squareThumb);
+    final mem = ImageCacheHelper.getMemoryImage(
+      widget.photo.cid,
+      variant: ImageVariant.squareThumb,
+    );
     if (mem != null) {
-      if (mounted) setState(() { _bytes = mem; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _bytes = mem;
+          _loading = false;
+        });
+      }
       return;
     }
     final bytes = await widget.imageService.loadImage(
@@ -64,36 +72,37 @@ class _PhotoGridItemState extends State<PhotoGridItem>
       variant: ImageVariant.squareThumb,
     );
     if (mounted) {
-      setState(() { _bytes = bytes; _loading = false; });
+      setState(() {
+        _bytes = bytes;
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isMac = Theme.of(context).platform == TargetPlatform.macOS;
+    final radius = isMac ? 12.0 : 0.0;
 
     return GestureDetector(
       onTap: widget.onTap,
       child: Hero(
         tag: widget.photo.heroTag,
         child: ClipRRect(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(radius),
           child: _loading
               ? _ShimmerBox(controller: _shimmerCtrl)
               : _bytes != null
-                  ? Image.memory(
-                      _bytes!,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    )
-                  : Container(
-                      color: cs.surfaceContainerLow,
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: cs.onSurfaceVariant.withOpacity(0.3),
-                        size: 24,
-                      ),
-                    ),
+              ? Image.memory(_bytes!, fit: BoxFit.cover, gaplessPlayback: true)
+              : Container(
+                  color: cs.surfaceContainerLow,
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                    size: 24,
+                  ),
+                ),
         ),
       ),
     );
@@ -108,7 +117,9 @@ class _ShimmerBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final base = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE8E8E8);
-    final highlight = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5);
+    final highlight = isDark
+        ? const Color(0xFF3A3A3A)
+        : const Color(0xFFF5F5F5);
 
     return AnimatedBuilder(
       animation: controller,

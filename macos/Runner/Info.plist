@@ -26,6 +26,8 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>BlockPhoto 需要访问你的照片以便选择和上传图片。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

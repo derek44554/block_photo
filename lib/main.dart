@@ -9,17 +9,14 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
+  );
 
   final connectionProvider = ConnectionProvider();
   final photoProvider = PhotoProvider();
 
-  await Future.wait([
-    connectionProvider.load(),
-    photoProvider.load(),
-  ]);
+  await Future.wait([connectionProvider.load(), photoProvider.load()]);
 
   runApp(
     MultiProvider(
@@ -42,7 +39,7 @@ class BlockPhotoApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.dark,
       home: const GalleryScreen(),
     );
   }
