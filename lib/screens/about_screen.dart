@@ -21,7 +21,7 @@ class AboutScreen extends StatelessWidget {
           // ── 顶部 Logo + 信息 ──
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 48),
+            padding: const EdgeInsets.symmetric(vertical: 28),
             child: Column(
               children: [
                 Container(
@@ -48,16 +48,13 @@ class AboutScreen extends StatelessWidget {
                 Text(
                   'BlockPhoto',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'v$_version',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -65,7 +62,10 @@ class AboutScreen extends StatelessWidget {
                   children: [
                     Text(
                       '作者: ',
-                      style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                     GestureDetector(
                       onTap: () => launchUrl(
@@ -158,7 +158,8 @@ class _LinkTile extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+        onTap: () =>
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -174,12 +175,19 @@ class _LinkTile extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w500)),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-              Icon(Icons.open_in_new_rounded,
-                  size: 16, color: cs.onSurfaceVariant),
+              Icon(
+                Icons.open_in_new_rounded,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
             ],
           ),
         ),

@@ -332,7 +332,7 @@ class _UploadScreenState extends State<UploadScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         children: [
           // 图片预览 / 选择区域
           GestureDetector(

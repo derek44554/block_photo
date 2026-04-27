@@ -13,7 +13,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
           _SectionLabel(label: '连接'),
           _SettingsTile(
@@ -56,10 +56,10 @@ class _SectionLabel extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: cs.primary,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-            ),
+          color: cs.primary,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
@@ -107,18 +107,29 @@ class _SettingsTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w500)),
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     if (subtitle != null)
-                      Text(subtitle!,
-                          style: TextStyle(
-                              fontSize: 12, color: cs.onSurfaceVariant)),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded,
-                  size: 18, color: cs.onSurfaceVariant),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: cs.onSurfaceVariant,
+              ),
             ],
           ),
         ),

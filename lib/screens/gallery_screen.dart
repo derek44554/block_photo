@@ -624,7 +624,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               final sideWidth = isCompact ? 288.0 : 320.0;
               final gap = isCompact ? 8.0 : 10.0;
               return Padding(
-                padding: const EdgeInsets.fromLTRB(4, 14, 4, 4),
+                padding: const EdgeInsets.fromLTRB(4, 6, 4, 2),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -750,7 +750,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final iconBg = isDesktop ? cs.surface : cs.surfaceContainerHigh;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -827,7 +827,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           key: ValueKey('$_selectedCollectionIndex$_selectedTag'),
           controller: _scrollCtrl,
           padding: isMac
-              ? const EdgeInsets.symmetric(horizontal: 4, vertical: 6)
+              ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
               : const EdgeInsets.all(2),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
@@ -912,7 +912,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -962,7 +962,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1085,7 +1085,7 @@ class _CollectionDrawerState extends State<_CollectionDrawer> {
       children: [
         if (widget.embedded)
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+            padding: const EdgeInsets.fromLTRB(10, 34, 10, 6),
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
