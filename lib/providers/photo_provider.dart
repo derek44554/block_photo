@@ -10,7 +10,9 @@ class PhotoProvider extends ChangeNotifier {
 
   List<PhotoCollection> get collections => List.unmodifiable(_collections);
   List<PhotoCollection> get albumCollections {
-    final defaults = _collections.where((c) => c.isDefault).toList(growable: false);
+    final defaults = _collections
+        .where((c) => c.isDefault)
+        .toList(growable: false);
     // 有标记默认的就只用默认集合，否则退回全部 isAlbum 集合
     if (defaults.isNotEmpty) return defaults;
     return _collections.where((c) => c.isAlbum).toList(growable: false);
@@ -20,10 +22,7 @@ class PhotoProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_collectionsKey) ?? [];
     try {
-      _collections = await compute(
-        _parse,
-        raw,
-      );
+      _collections = await compute(_parse, raw);
     } catch (_) {
       _collections = [];
     }
@@ -31,16 +30,29 @@ class PhotoProvider extends ChangeNotifier {
   }
 
   static List<PhotoCollection> _parse(List<String> raw) {
-    return raw
-        .map((e) => PhotoCollection.fromJson(jsonDecode(e) as Map<String, dynamic>))
-        .toList();
+    final result = <PhotoCollection>[];
+    for (final item in raw) {
+      try {
+        final decoded = jsonDecode(item);
+        if (decoded is Map<String, dynamic>) {
+          result.add(PhotoCollection.fromJson(decoded));
+        }
+      } catch (_) {
+        // 忽略损坏的单条集合配置，保留其他集合。
+      }
+    }
+    return result;
   }
 
   Future<void> addCollection(PhotoCollection collection) async {
     final idx = _collections.indexWhere((c) => c.bid == collection.bid);
     if (idx >= 0) {
       final updated = [..._collections];
-      updated[idx] = collection;
+      final existing = _collections[idx];
+      updated[idx] = collection.copyWith(
+        isAlbum: collection.isAlbum || existing.isAlbum,
+        isDefault: collection.isDefault || existing.isDefault,
+      );
       _collections = updated;
     } else {
       _collections = [..._collections, collection];
@@ -56,19 +68,25 @@ class PhotoProvider extends ChangeNotifier {
   }
 
   Future<void> toggleAlbum(String bid, bool isAlbum) async {
-    _collections = _collections.map((c) => c.bid == bid ? c.copyWith(isAlbum: isAlbum) : c).toList();
+    _collections = _collections
+        .map((c) => c.bid == bid ? c.copyWith(isAlbum: isAlbum) : c)
+        .toList();
     await _persist();
     notifyListeners();
   }
 
   Future<void> toggleDefault(String bid, bool isDefault) async {
-    _collections = _collections.map((c) => c.bid == bid ? c.copyWith(isDefault: isDefault) : c).toList();
+    _collections = _collections
+        .map((c) => c.bid == bid ? c.copyWith(isDefault: isDefault) : c)
+        .toList();
     await _persist();
     notifyListeners();
   }
 
   /// 从网络刷新所有集合的最新数据，有变化才更新
-  Future<void> refreshCollections(Future<Map<String, dynamic>> Function(String bid) fetchBlock) async {
+  Future<void> refreshCollections(
+    Future<Map<String, dynamic>> Function(String bid) fetchBlock,
+  ) async {
     if (_collections.isEmpty) return;
     var changed = false;
     final updated = <PhotoCollection>[];
@@ -79,7 +97,7 @@ class PhotoProvider extends ChangeNotifier {
         final blockData = data is Map<String, dynamic> ? data : response;
         if (blockData.isNotEmpty) {
           updated.add(col.copyWith(block: blockData));
-          changed = true;
+          changed = changed || !mapEquals(col.block, blockData);
         } else {
           updated.add(col);
         }

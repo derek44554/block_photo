@@ -18,7 +18,8 @@ class ImageService {
 
   String? get _endpoint => _connectionProvider.ipfsEndpoint;
 
-  final _pending = HashMap<String, Future<Uint8List>>();
+  final _downloadPending = HashMap<String, Future<Uint8List>>();
+  final _variantPending = HashMap<String, Future<Uint8List>>();
 
   Future<Uint8List?> loadImage(
     PhotoItem photo, {
@@ -29,45 +30,93 @@ class ImageService {
     if (endpoint == null || endpoint.isEmpty) return null;
 
     try {
-      // 1. 内存缓存
-      final mem = ImageCacheHelper.getMemoryImage(photo.cid, variant: variant);
-      if (mem != null) return mem;
+      final cached = await _readCachedVariant(photo.cid, variant);
+      if (cached != null) return cached;
 
-      // 2. 磁盘缓存
-      final disk = await ImageCacheHelper.getCachedImage(photo.cid, variant: variant);
-      if (disk != null) {
-        final bytes = await disk.readAsBytes();
-        ImageCacheHelper.cacheMemoryImage(photo.cid, bytes, variant: variant);
-        return bytes;
-      }
-
-      // 3. 网络下载（去重并发）
       final key = '${variant.name}::${photo.cid}';
-      final existing = _pending[key];
+      final existing = _variantPending[key];
       if (existing != null) return await existing;
 
-      final future = _downloadAndDecrypt(photo, endpoint);
-      _pending[key] = future;
+      final future = _loadVariant(photo, endpoint, variant);
+      _variantPending[key] = future;
       try {
-        final originalBytes = await future;
-        // 对 thumb/small/medium 生成缩放版本，original 直接存
-        final bytes = variant == ImageVariant.original
-            ? originalBytes
-            : await ImageCacheHelper.ensureVariant(photo.cid, originalBytes, variant: variant);
-        ImageCacheHelper.cacheMemoryImage(photo.cid, bytes, variant: variant);
-        unawaited(ImageCacheHelper.saveImageToCache(photo.cid, bytes, variant: variant));
-        return bytes;
+        return await future;
       } finally {
-        _pending.remove(key);
+        _variantPending.remove(key);
       }
     } catch (_) {
       return null;
     }
   }
 
-  Future<Uint8List> _downloadAndDecrypt(PhotoItem photo, String endpoint) async {
+  Future<Uint8List?> _readCachedVariant(
+    String cid,
+    ImageVariant variant,
+  ) async {
+    final mem = ImageCacheHelper.getMemoryImage(cid, variant: variant);
+    if (mem != null) return mem;
+
+    final disk = await ImageCacheHelper.getCachedImage(cid, variant: variant);
+    if (disk == null) return null;
+
+    final bytes = await disk.readAsBytes();
+    ImageCacheHelper.cacheMemoryImage(cid, bytes, variant: variant);
+    return bytes;
+  }
+
+  Future<Uint8List> _loadVariant(
+    PhotoItem photo,
+    String endpoint,
+    ImageVariant variant,
+  ) async {
+    final originalBytes = await _getOriginalBytes(photo, endpoint);
+    final bytes = variant == ImageVariant.original
+        ? originalBytes
+        : await ImageCacheHelper.ensureVariant(
+            photo.cid,
+            originalBytes,
+            variant: variant,
+          );
+
+    ImageCacheHelper.cacheMemoryImage(photo.cid, bytes, variant: variant);
+    unawaited(
+      ImageCacheHelper.saveImageToCache(photo.cid, bytes, variant: variant),
+    );
+    return bytes;
+  }
+
+  Future<Uint8List> _getOriginalBytes(PhotoItem photo, String endpoint) async {
+    final cached = await _readCachedVariant(photo.cid, ImageVariant.original);
+    if (cached != null) return cached;
+
+    final existing = _downloadPending[photo.cid];
+    if (existing != null) return await existing;
+
+    final future = _downloadAndDecrypt(photo, endpoint);
+    _downloadPending[photo.cid] = future;
+    try {
+      final bytes = await future;
+      unawaited(
+        ImageCacheHelper.saveImageToCache(
+          photo.cid,
+          bytes,
+          variant: ImageVariant.original,
+        ),
+      );
+      return bytes;
+    } finally {
+      _downloadPending.remove(photo.cid);
+    }
+  }
+
+  Future<Uint8List> _downloadAndDecrypt(
+    PhotoItem photo,
+    String endpoint,
+  ) async {
     final url = '${endpoint.replaceAll(RegExp(r'/+$'), '')}/${photo.cid}';
-    final response = await http.get(Uri.parse(url));
+    final response = await http
+        .get(Uri.parse(url))
+        .timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}');
     }
@@ -126,7 +175,8 @@ Future<Uint8List> _decryptSync(Uint8List data, String keyValue) async {
 Uint8List _decodeKey(String value) {
   final normalized = value.trim();
   // 尝试 hex
-  if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(normalized) && normalized.length.isEven) {
+  if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(normalized) &&
+      normalized.length.isEven) {
     return _hexToBytes(normalized);
   }
   // 尝试 base64

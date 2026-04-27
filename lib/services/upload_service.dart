@@ -37,7 +37,9 @@ class UploadService {
     if (connection.address.isEmpty) throw Exception('节点地址无效');
 
     final nodeData = connection.nodeData;
-    final nodeBid = nodeData != null ? (nodeData['sender'] as String? ?? '') : '';
+    final nodeBid = nodeData != null
+        ? (nodeData['sender'] as String? ?? '')
+        : '';
     if (nodeBid.length < 10) throw Exception('无效的节点 BID: $nodeBid');
 
     // 1. 读取字节（优先用传入的，保留完整 EXIF）
@@ -54,8 +56,9 @@ class UploadService {
 
     // 3. 上传到 IPFS
     onStatus?.call('上传到 IPFS...');
-    final uploadUrl =
-        Uri.parse(connection.address).replace(path: '/ipfs/ipfs/upload').toString();
+    final uploadUrl = Uri.parse(
+      connection.address,
+    ).replace(path: '/ipfs/ipfs/upload').toString();
     final ipfsData = await _uploadBytes(
       bytes: bytes,
       endpoint: uploadUrl,
@@ -69,7 +72,11 @@ class UploadService {
     if (cid != null && cid.isNotEmpty) {
       try {
         await ImageCacheHelper.removeFromCache(cid);
-        ImageCacheHelper.cacheMemoryImage(cid, bytes, variant: ImageVariant.original);
+        ImageCacheHelper.cacheMemoryImage(
+          cid,
+          bytes,
+          variant: ImageVariant.original,
+        );
       } catch (_) {}
     }
 
@@ -121,7 +128,9 @@ class UploadService {
       final password = IpfsPasswordHelper.computeUploadPassword(nodeKeyBase64);
       final request = http.MultipartRequest('POST', Uri.parse(endpoint))
         ..fields['password'] = password
-        ..files.add(await http.MultipartFile.fromPath('file', result.uploadPath));
+        ..files.add(
+          await http.MultipartFile.fromPath('file', result.uploadPath),
+        );
 
       final response = await request.send();
       final body = await response.stream.bytesToString();
@@ -133,19 +142,26 @@ class UploadService {
       final cid = decoded['cid'];
       if (cid is! String || cid.isEmpty) throw Exception('响应缺少 cid 字段');
 
-      final resolvedExt = ext.isNotEmpty ? (ext.startsWith('.') ? ext : '.$ext') : '';
+      final resolvedExt = ext.isNotEmpty
+          ? (ext.startsWith('.') ? ext : '.$ext')
+          : '';
       final ipfsData = <String, dynamic>{
         'cid': cid,
         'ext': resolvedExt,
         'size': result.fileSize,
       };
       if (result.encryptionKeyHex != null) {
-        ipfsData['encryption'] = {'algo': 'PPE-001', 'key': result.encryptionKeyHex};
+        ipfsData['encryption'] = {
+          'algo': 'PPE-001',
+          'key': result.encryptionKeyHex,
+        };
       }
       return ipfsData;
     } finally {
       if (tempPath != null) {
-        try { await File(tempPath).delete(); } catch (_) {}
+        try {
+          await File(tempPath).delete();
+        } catch (_) {}
       }
     }
   }
@@ -154,7 +170,11 @@ class UploadService {
 
   Future<FileMeta> extractMeta(File file) async {
     final bytes = await file.readAsBytes();
-    return extractMetaFromBytes(bytes: bytes, path: file.path, originalFile: file);
+    return extractMetaFromBytes(
+      bytes: bytes,
+      path: file.path,
+      originalFile: file,
+    );
   }
 
   Future<FileMeta> extractMetaFromBytes({
@@ -211,7 +231,10 @@ class UploadService {
       final latRatios = data['GPS GPSLatitude']?.values;
       final lonRatios = data['GPS GPSLongitude']?.values;
 
-      if (latRef == null || lonRef == null || latRatios == null || lonRatios == null) {
+      if (latRef == null ||
+          lonRef == null ||
+          latRatios == null ||
+          lonRatios == null) {
         return null;
       }
 
@@ -301,14 +324,22 @@ Future<_UploadResult> _processBytesPayload(_BytesPayload payload) async {
       'raw_${DateTime.now().microsecondsSinceEpoch}_${_randomHex(8)}',
     );
     await File(tempPath).writeAsBytes(bytes, flush: true);
-    return _UploadResult(uploadPath: tempPath, fileSize: bytes.length, tempPath: tempPath);
+    return _UploadResult(
+      uploadPath: tempPath,
+      fileSize: bytes.length,
+      tempPath: tempPath,
+    );
   }
 
   final key = _randomBytes(32);
   final algorithm = AesGcm.with256bits();
   final secretKey = await algorithm.newSecretKeyFromBytes(key);
   final nonce = algorithm.newNonce();
-  final secretBox = await algorithm.encrypt(bytes, secretKey: secretKey, nonce: nonce);
+  final secretBox = await algorithm.encrypt(
+    bytes,
+    secretKey: secretKey,
+    nonce: nonce,
+  );
 
   final combined = Uint8List.fromList([
     ...nonce,

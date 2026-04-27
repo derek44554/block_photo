@@ -19,7 +19,9 @@ String _formatDateTime(DateTime dt) {
 }
 
 class UploadScreen extends StatefulWidget {
-  const UploadScreen({super.key});
+  const UploadScreen({super.key, this.initialCollectionBids = const []});
+
+  final List<String> initialCollectionBids;
 
   @override
   State<UploadScreen> createState() => _UploadScreenState();
@@ -41,6 +43,14 @@ class _UploadScreenState extends State<UploadScreen> {
   // 从文件提取的元数据
   DateTime? _photoTime;
   Map<String, double>? _photoGps;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCollectionBids = widget.initialCollectionBids
+        .where((bid) => bid.trim().isNotEmpty)
+        .toSet();
+  }
 
   @override
   void dispose() {
@@ -311,6 +321,10 @@ class _UploadScreenState extends State<UploadScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final collections = context.watch<PhotoProvider>().collections;
+    final previewCacheWidth =
+        (MediaQuery.sizeOf(context).width *
+                MediaQuery.devicePixelRatioOf(context))
+            .round();
 
     return Scaffold(
       appBar: AppBar(
@@ -356,6 +370,8 @@ class _UploadScreenState extends State<UploadScreen> {
                         _previewBytes!,
                         fit: BoxFit.cover,
                         width: double.infinity,
+                        cacheWidth: previewCacheWidth,
+                        filterQuality: FilterQuality.medium,
                       ),
                     )
                   : Column(

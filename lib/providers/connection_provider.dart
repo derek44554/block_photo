@@ -20,13 +20,22 @@ class ConnectionProvider extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_storageKey) ?? [];
-    _connections = raw
-        .map((e) => ConnectionModel.fromJson(jsonDecode(e) as Map<String, dynamic>))
-        .toList();
+    _connections = [];
+    for (final item in raw) {
+      try {
+        final decoded = jsonDecode(item);
+        if (decoded is Map<String, dynamic>) {
+          _connections.add(ConnectionModel.fromJson(decoded));
+        }
+      } catch (_) {
+        // 忽略损坏的单条连接配置，保留其他可用配置。
+      }
+    }
 
     final activeIndex = prefs.getInt(_activeKey) ?? 0;
     if (_connections.isNotEmpty) {
-      _activeConnection = _connections[activeIndex.clamp(0, _connections.length - 1)];
+      _activeConnection =
+          _connections[activeIndex.clamp(0, _connections.length - 1)];
     }
     _ipfsEndpoint = prefs.getString(_ipfsKey);
     notifyListeners();
@@ -40,12 +49,12 @@ class ConnectionProvider extends ChangeNotifier {
   /// 后台刷新连接的 nodeData（获取节点 sender BID 等信息）
   Future<void> _refreshNodeData(ConnectionModel connection) async {
     try {
-      final nodeData = await ApiClient(connection: connection).postToBridge(
-        protocol: 'open',
-        routing: '/node/node',
-        data: const {},
+      final nodeData = await ApiClient(
+        connection: connection,
+      ).postToBridge(protocol: 'open', routing: '/node/node', data: const {});
+      final index = _connections.indexWhere(
+        (c) => c.address == connection.address,
       );
-      final index = _connections.indexWhere((c) => c.address == connection.address);
       if (index == -1) return;
       _connections[index] = _connections[index].copyWith(nodeData: nodeData);
       if (_activeConnection?.address == connection.address) {
@@ -59,11 +68,25 @@ class ConnectionProvider extends ChangeNotifier {
   }
 
   Future<void> addConnection(ConnectionModel connection) async {
-    _connections.add(connection);
-    if (_connections.length == 1) {
-      _activeConnection = connection;
+    final existingIndex = _connections.indexWhere(
+      (c) => c.address == connection.address,
+    );
+    if (existingIndex >= 0) {
+      _connections[existingIndex] = connection;
+      if (_activeConnection?.address == connection.address) {
+        _activeConnection = connection;
+      }
+    } else {
+      _connections.add(connection);
+    }
+
+    if (_activeConnection == null) {
+      final activeIndex = existingIndex >= 0
+          ? existingIndex
+          : _connections.length - 1;
+      _activeConnection = _connections[activeIndex];
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_activeKey, 0);
+      await prefs.setInt(_activeKey, activeIndex);
     }
     await _persist();
     notifyListeners();
@@ -74,15 +97,53 @@ class ConnectionProvider extends ChangeNotifier {
   }
 
   Future<void> removeConnection(int index) async {
+    if (index < 0 || index >= _connections.length) return;
     _connections.removeAt(index);
     final prefs = await SharedPreferences.getInstance();
-    final activeIndex = prefs.getInt(_activeKey) ?? 0;
-    if (activeIndex >= _connections.length) {
-      _activeConnection = _connections.isNotEmpty ? _connections[0] : null;
+    final currentActiveIndex = _resolveActiveIndex(
+      fallback: prefs.getInt(_activeKey) ?? 0,
+      removedIndex: index,
+    );
+
+    if (_connections.isEmpty) {
+      _activeConnection = null;
       await prefs.setInt(_activeKey, 0);
+    } else {
+      final nextActiveIndex = currentActiveIndex.clamp(
+        0,
+        _connections.length - 1,
+      );
+      _activeConnection = _connections[nextActiveIndex];
+      await prefs.setInt(_activeKey, nextActiveIndex);
     }
     await _persist();
     notifyListeners();
+  }
+
+  int _resolveActiveIndex({required int fallback, required int removedIndex}) {
+    final active = _activeConnection;
+    final beforeRemoveLength = _connections.length + 1;
+    var activeIndex = active == null
+        ? fallback
+        : _connections.indexWhere(
+            (c) =>
+                c.address == active.address && c.keyBase64 == active.keyBase64,
+          );
+
+    if (activeIndex == -1) {
+      activeIndex = fallback.clamp(0, beforeRemoveLength - 1);
+    } else if (activeIndex >= removedIndex) {
+      // index 已经在删除后的列表中；换算回删除前的位置再统一处理。
+      activeIndex += 1;
+    }
+
+    if (activeIndex == removedIndex) {
+      return removedIndex;
+    }
+    if (activeIndex > removedIndex) {
+      return activeIndex - 1;
+    }
+    return activeIndex;
   }
 
   Future<void> setActive(int index) async {

@@ -26,25 +26,42 @@ class PhotoCollection {
   /// link_tag 标签列表
   List<String> get linkTags {
     final raw = _block['link_tag'];
-    if (raw is List) return raw.whereType<String>().where((s) => s.trim().isNotEmpty).toList();
+    if (raw is List) {
+      return raw.whereType<String>().where((s) => s.trim().isNotEmpty).toList();
+    }
     return [];
   }
 
-  PhotoCollection copyWith({String? bid, Map<String, dynamic>? block, bool? isAlbum, bool? isDefault}) {
+  PhotoCollection copyWith({
+    String? bid,
+    Map<String, dynamic>? block,
+    bool? isAlbum,
+    bool? isDefault,
+  }) {
     return PhotoCollection._internal(
       bid: bid ?? this.bid,
-      block: block != null ? Map<String, dynamic>.from(block) : Map<String, dynamic>.from(_block),
+      block: block != null
+          ? Map<String, dynamic>.from(block)
+          : Map<String, dynamic>.from(_block),
       isAlbum: isAlbum ?? this.isAlbum,
       isDefault: isDefault ?? this.isDefault,
     );
   }
 
-  Map<String, dynamic> toJson() => {'bid': bid, 'block': _block, 'isAlbum': isAlbum, 'isDefault': isDefault};
+  Map<String, dynamic> toJson() => {
+    'bid': bid,
+    'block': _block,
+    'isAlbum': isAlbum,
+    'isDefault': isDefault,
+  };
 
   factory PhotoCollection.fromJson(Map<String, dynamic> json) {
     final rawBlock = json['block'];
-    final blockMap = rawBlock is Map<String, dynamic> ? Map<String, dynamic>.from(rawBlock) : <String, dynamic>{};
-    final resolvedBid = (json['bid'] as String?) ?? (blockMap['bid'] as String?) ?? '';
+    final blockMap = rawBlock is Map<String, dynamic>
+        ? Map<String, dynamic>.from(rawBlock)
+        : <String, dynamic>{};
+    final resolvedBid =
+        (json['bid'] as String?) ?? (blockMap['bid'] as String?) ?? '';
     return PhotoCollection._internal(
       bid: resolvedBid,
       block: blockMap,
@@ -71,8 +88,10 @@ class PhotoItem {
     final ipfs = block.getMap('ipfs');
     final cid = (ipfs['cid'] as String?)?.trim() ?? '';
     final bid = block.maybeString('bid') ?? cid;
-    final title = block.maybeString('name') ?? block.maybeString('fileName') ?? '图片';
-    final createdAt = block.getDateTime('add_time') ?? block.getDateTime('createdAt');
+    final title =
+        block.maybeString('name') ?? block.maybeString('fileName') ?? '图片';
+    final createdAt =
+        block.getDateTime('add_time') ?? block.getDateTime('createdAt');
     final time = createdAt != null ? _formatDate(createdAt) : '';
     final ext = ipfs['ext'] as String?;
 
@@ -113,8 +132,20 @@ class PhotoItem {
 
   bool get isImage {
     if (ext == null) return true; // 默认当图片处理
-    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp',
-                       '.JPG', '.JPEG', '.PNG', '.GIF', '.WEBP', '.BMP'];
+    const imageExts = [
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.gif',
+      '.webp',
+      '.bmp',
+      '.JPG',
+      '.JPEG',
+      '.PNG',
+      '.GIF',
+      '.WEBP',
+      '.BMP',
+    ];
     return imageExts.contains(ext);
   }
 

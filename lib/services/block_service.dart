@@ -29,7 +29,10 @@ class BlockService {
     if (collectionBids.length == 1) {
       allBids = await _getBidsByMainWithTag(collectionBids.first, tag: tag);
     } else {
-      allBids = await _api.getBidsByTargets(bids: collectionBids, order: 'desc');
+      allBids = await _api.getBidsByTargets(
+        bids: collectionBids,
+        order: 'desc',
+      );
     }
 
     final missing = <String>[];
@@ -39,7 +42,10 @@ class BlockService {
     }
 
     for (var i = 0; i < missing.length; i += _batchSize) {
-      final batch = missing.sublist(i, (i + _batchSize).clamp(0, missing.length));
+      final batch = missing.sublist(
+        i,
+        (i + _batchSize).clamp(0, missing.length),
+      );
       try {
         final response = await _api.getMultipleBlocks(bids: batch);
         final data = response['data'] ?? response;
@@ -52,7 +58,10 @@ class BlockService {
           }
         }
       } catch (_) {}
-      onProgress?.call((i + batch.length).clamp(0, missing.length), missing.length);
+      onProgress?.call(
+        (i + batch.length).clamp(0, missing.length),
+        missing.length,
+      );
     }
 
     return allBids;
@@ -135,8 +144,15 @@ class BlockService {
     if (items is! List) return [];
     return items
         .whereType<Map<String, dynamic>>()
-        .map((e) =>
-            (e['main'] ?? e['main_bid'] ?? e['collection'] ?? e['collection_bid'] ?? '') as String)
+        .map(
+          (e) =>
+              (e['main'] ??
+                      e['main_bid'] ??
+                      e['collection'] ??
+                      e['collection_bid'] ??
+                      '')
+                  as String,
+        )
         .where((s) => s.isNotEmpty)
         .toList();
   }
@@ -176,7 +192,10 @@ class BlockService {
   }
 
   /// 通过 /link/main/multiple 分页拉取所有 BID（支持 tag 过滤）
-  Future<List<String>> _getBidsByMainWithTag(String collectionBid, {String? tag}) async {
+  Future<List<String>> _getBidsByMainWithTag(
+    String collectionBid, {
+    String? tag,
+  }) async {
     final result = <String>[];
     int page = 1;
     const limit = 100;

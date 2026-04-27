@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:block_flutter/block_flutter.dart';
@@ -49,7 +48,6 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   bool _trackingDrag = false;
 
   static const double _dismissThreshold = 60;
-  static const double _dismissVelocity = 600;
   static const double _thumbSize = 52;
   static const double _thumbSpacing = 3;
 
@@ -63,10 +61,12 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     _thumbCtrl = ScrollController(
       initialScrollOffset: _thumbScrollOffset(widget.initialIndex),
     );
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
+    );
   }
 
   @override
@@ -123,10 +123,13 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
         ),
         transitionsBuilder: (_, animation, __, child) {
           return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                ),
             child: child,
           );
         },
@@ -189,18 +192,27 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       return;
     }
     if (_dragOffset < -60) {
-      setState(() { _dragOffset = 0; _bgOpacity = 1.0; });
+      setState(() {
+        _dragOffset = 0;
+        _bgOpacity = 1.0;
+      });
       _openInfo();
       return;
     }
     // 回弹：不恢复 UI
-    setState(() { _dragOffset = 0; _bgOpacity = 1.0; });
+    setState(() {
+      _dragOffset = 0;
+      _bgOpacity = 1.0;
+    });
   }
 
   void _onPointerCancel(PointerCancelEvent e) {
     _trackingDrag = false;
     _pointerStart = null;
-    setState(() { _dragOffset = 0; _bgOpacity = 1.0; });
+    setState(() {
+      _dragOffset = 0;
+      _bgOpacity = 1.0;
+    });
   }
 
   @override
@@ -261,7 +273,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
 
             // ── 顶部渐变 + 返回 + 标题（固定不动）──
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
                 opacity: _uiVisible ? 1.0 : 0.0,
@@ -280,9 +294,13 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                                color: Colors.white, size: 20),
-                            onPressed: () => Navigator.of(context).pop(_current),
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () =>
+                                Navigator.of(context).pop(_current),
                           ),
                           Expanded(
                             child: Text(
@@ -301,7 +319,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                               padding: const EdgeInsets.only(right: 16),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 7, vertical: 3),
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.white12,
                                   borderRadius: BorderRadius.circular(4),
@@ -309,12 +329,19 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.lock_rounded,
-                                        color: Colors.white54, size: 11),
+                                    Icon(
+                                      Icons.lock_rounded,
+                                      color: Colors.white54,
+                                      size: 11,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('已加密',
-                                        style: TextStyle(
-                                            color: Colors.white54, fontSize: 11)),
+                                    Text(
+                                      '已加密',
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -329,7 +356,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
 
             // ── 底部渐变 + 缩略图条 + 时间 + 加密状态（固定不动）──
             Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
                 opacity: _uiVisible ? 1.0 : 0.0,
@@ -354,50 +383,61 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                             onTap: _openInfo,
                             child: total > 1
                                 ? SizedBox(
-                              height: _thumbSize + 8,
-                              child: ListView.builder(
-                                controller: _thumbCtrl,
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                itemCount: total,
-                                itemExtent: _thumbSize + _thumbSpacing,
-                                itemBuilder: (context, index) {
-                                  final isSelected = index == _current;
-                                  return GestureDetector(
-                                    onTap: () {
-                                      _pageCtrl.animateToPage(
-                                        index,
-                                        duration: const Duration(milliseconds: 300),
-                                        curve: Curves.easeOut,
-                                      );
-                                    },
-                                    child: Padding(
-                                      padding: EdgeInsets.only(right: _thumbSpacing),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? Colors.white
-                                                : Colors.transparent,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(3),
-                                          child: _ThumbnailImage(
-                                            photo: _photos[index],
-                                            imageService: widget.imageService,
-                                          ),
-                                        ),
+                                    height: _thumbSize + 8,
+                                    child: ListView.builder(
+                                      controller: _thumbCtrl,
+                                      scrollDirection: Axis.horizontal,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
                                       ),
+                                      itemCount: total,
+                                      itemExtent: _thumbSize + _thumbSpacing,
+                                      itemBuilder: (context, index) {
+                                        final isSelected = index == _current;
+                                        return GestureDetector(
+                                          onTap: () {
+                                            _pageCtrl.animateToPage(
+                                              index,
+                                              duration: const Duration(
+                                                milliseconds: 300,
+                                              ),
+                                              curve: Curves.easeOut,
+                                            );
+                                          },
+                                          child: Padding(
+                                            padding: EdgeInsets.only(
+                                              right: _thumbSpacing,
+                                            ),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 200,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : Colors.transparent,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                child: _ThumbnailImage(
+                                                  photo: _photos[index],
+                                                  imageService:
+                                                      widget.imageService,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                  );
-                                },
-                              ),
-                            )
+                                  )
                                 : const SizedBox(height: 16),
                           ),
                         ],
@@ -471,7 +511,10 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
   void _addTag(String tag) {
     final t = tag.trim();
     if (t.isEmpty || _tags.contains(t)) return;
-    setState(() { _tags.add(t); _dirty = true; });
+    setState(() {
+      _tags.add(t);
+      _dirty = true;
+    });
   }
 
   void _showAddTagDialog() {
@@ -503,21 +546,33 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
     );
   }
 
-  void _removeTag(String t) => setState(() { _tags.remove(t); _dirty = true; });
+  void _removeTag(String t) => setState(() {
+    _tags.remove(t);
+    _dirty = true;
+  });
 
   void _addLink(String bid) {
     if (_linkedBids.contains(bid)) return;
-    setState(() { _linkedBids = [..._linkedBids, bid]; _dirty = true; });
+    setState(() {
+      _linkedBids = [..._linkedBids, bid];
+      _dirty = true;
+    });
   }
 
   void _removeLink(String bid) {
     if (_linkedBids.length <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('链接至少保留一个'), duration: Duration(seconds: 2)),
+        const SnackBar(
+          content: Text('链接至少保留一个'),
+          duration: Duration(seconds: 2),
+        ),
       );
       return;
     }
-    setState(() { _linkedBids = _linkedBids.where((b) => b != bid).toList(); _dirty = true; });
+    setState(() {
+      _linkedBids = _linkedBids.where((b) => b != bid).toList();
+      _dirty = true;
+    });
   }
 
   Future<void> _save() async {
@@ -533,9 +588,14 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
       await service.saveBlock(updated);
       // 同步更新本地缓存
       final bid = updated['bid'] as String?;
-      if (bid != null) await BlockCache.instance.put(bid, BlockModel(data: updated));
+      if (bid != null) {
+        await BlockCache.instance.put(bid, BlockModel(data: updated));
+      }
       if (mounted) {
-        setState(() { _dirty = false; _saving = false; });
+        setState(() {
+          _dirty = false;
+          _saving = false;
+        });
         // 通知外层更新，不关闭页面
         final newItem = PhotoItem.fromBlock(BlockModel(data: updated));
         widget.onSaved?.call(newItem);
@@ -546,9 +606,9 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
       }
     }
   }
@@ -562,7 +622,11 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
   }
 
   String _formatCoord(dynamic v) {
-    final d = v is double ? v : v is int ? v.toDouble() : double.tryParse(v.toString());
+    final d = v is double
+        ? v
+        : v is int
+        ? v.toDouble()
+        : double.tryParse(v.toString());
     if (d == null) return v.toString();
     return d.toStringAsFixed(6);
   }
@@ -571,7 +635,9 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final brightness = Theme.of(context).brightness;
-    final bg = brightness == Brightness.dark ? const Color(0xFF111111) : cs.surface;
+    final bg = brightness == Brightness.dark
+        ? const Color(0xFF111111)
+        : cs.surface;
     final ipfs = widget.photo.block.getMap('ipfs');
     final sizeStr = _formatSize(ipfs['size']);
 
@@ -597,8 +663,13 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
           if (_saving)
             const Padding(
               padding: EdgeInsets.only(right: 16),
-              child: Center(child: SizedBox(width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
             )
           else if (_dirty)
             TextButton(onPressed: _save, child: const Text('保存')),
@@ -610,7 +681,11 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
           // 缩略图
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: _ThumbnailImage(photo: widget.photo, imageService: widget.imageService, variant: ImageVariant.medium),
+            child: _ThumbnailImage(
+              photo: widget.photo,
+              imageService: widget.imageService,
+              variant: ImageVariant.medium,
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -619,10 +694,14 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: TextField(
               controller: _titleCtrl,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               decoration: InputDecoration(
                 labelText: '标题',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 isDense: true,
               ),
               textInputAction: TextInputAction.next,
@@ -640,7 +719,9 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
               decoration: InputDecoration(
                 labelText: '介绍',
                 alignLabelWithHint: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 isDense: true,
               ),
             ),
@@ -653,24 +734,42 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('标签', style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                Text(
+                  '标签',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: [
                     // 已有标签
-                    ..._tags.map((t) => Chip(
-                      label: Text(t, style: TextStyle(fontSize: 12, color: cs.onPrimaryContainer, fontWeight: FontWeight.w500)),
-                      deleteIcon: Icon(Icons.close_rounded, size: 13, color: cs.onPrimaryContainer.withValues(alpha: 0.6)),
-                      onDeleted: () => _removeTag(t),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: cs.primaryContainer,
-                      side: BorderSide.none,
-                    )),
+                    ..._tags.map(
+                      (t) => Chip(
+                        label: Text(
+                          t,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onPrimaryContainer,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        deleteIcon: Icon(
+                          Icons.close_rounded,
+                          size: 13,
+                          color: cs.onPrimaryContainer.withValues(alpha: 0.6),
+                        ),
+                        onDeleted: () => _removeTag(t),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: cs.primaryContainer,
+                        side: BorderSide.none,
+                      ),
+                    ),
                     // + 添加标签（虚线边框）
                     _DashedChip(
                       label: '+ 添加标签',
@@ -684,22 +783,45 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
           ),
 
           const SizedBox(height: 24),
-          Divider(height: 1, indent: 20, endIndent: 20,
-              color: cs.outlineVariant.withValues(alpha: 0.5)),
+          Divider(
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+          ),
           const SizedBox(height: 8),
 
           // 元数据
           if (widget.photo.time.isNotEmpty)
-            _MetaRow(icon: Icons.access_time_rounded, label: '时间', value: widget.photo.time),
+            _MetaRow(
+              icon: Icons.access_time_rounded,
+              label: '时间',
+              value: widget.photo.time,
+            ),
           if (sizeStr.isNotEmpty)
-            _MetaRow(icon: Icons.data_usage_rounded, label: '大小', value: sizeStr),
+            _MetaRow(
+              icon: Icons.data_usage_rounded,
+              label: '大小',
+              value: sizeStr,
+            ),
           if (gpsStr != null)
-            _MetaRow(icon: Icons.location_on_rounded, label: 'GPS', value: gpsStr, selectable: true),
+            _MetaRow(
+              icon: Icons.location_on_rounded,
+              label: 'GPS',
+              value: gpsStr,
+              selectable: true,
+            ),
           _MetaRow(
-            icon: widget.photo.isEncrypted ? Icons.lock_rounded : Icons.lock_open_rounded,
+            icon: widget.photo.isEncrypted
+                ? Icons.lock_rounded
+                : Icons.lock_open_rounded,
             label: '加密',
-            value: widget.photo.isEncrypted ? '已加密（${widget.photo.encryptionAlgo}）' : '未加密',
-            valueColor: widget.photo.isEncrypted ? cs.primary : cs.onSurfaceVariant,
+            value: widget.photo.isEncrypted
+                ? '已加密（${widget.photo.encryptionAlgo}）'
+                : '未加密',
+            valueColor: widget.photo.isEncrypted
+                ? cs.primary
+                : cs.onSurfaceVariant,
           ),
           _LinkRows(
             bids: _linkedBids,
@@ -721,7 +843,11 @@ class _PhotoInfoScreenState extends State<PhotoInfoScreen> {
 }
 
 class _DashedChip extends StatelessWidget {
-  const _DashedChip({required this.label, required this.color, required this.onTap});
+  const _DashedChip({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
   final String label;
   final Color color;
   final VoidCallback onTap;
@@ -754,7 +880,9 @@ class _DashedBorderPainter extends CustomPainter {
 
     const radius = Radius.circular(16);
     final rRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height), radius);
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      radius,
+    );
 
     const dashWidth = 4.0;
     const dashSpace = 3.0;
@@ -803,14 +931,22 @@ class _LinkRows extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 36, height: 4,
+                width: 36,
+                height: 4,
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: cs.outlineVariant,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Text(bid, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontFamily: 'monospace')),
+              Text(
+                bid,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                  fontFamily: 'monospace',
+                ),
+              ),
               const SizedBox(height: 4),
               ListTile(
                 leading: Icon(Icons.copy_rounded, color: cs.onSurfaceVariant),
@@ -819,7 +955,10 @@ class _LinkRows extends StatelessWidget {
                   Navigator.pop(context);
                   Clipboard.setData(ClipboardData(text: bid));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('已复制 BID'), duration: Duration(seconds: 2)),
+                    const SnackBar(
+                      content: Text('已复制 BID'),
+                      duration: Duration(seconds: 2),
+                    ),
                   );
                 },
               ),
@@ -840,7 +979,9 @@ class _LinkRows extends StatelessWidget {
 
   void _showAddSheet(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final unknownBids = bids.where((b) => !collections.any((c) => c.bid == b)).toList();
+    final unknownBids = bids
+        .where((b) => !collections.any((c) => c.bid == b))
+        .toList();
 
     showModalBottomSheet<void>(
       context: context,
@@ -857,7 +998,10 @@ class _LinkRows extends StatelessWidget {
               if (linked.contains(bid)) {
                 if (linked.length <= 1) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('链接至少保留一个'), duration: Duration(seconds: 2)),
+                    const SnackBar(
+                      content: Text('链接至少保留一个'),
+                      duration: Duration(seconds: 2),
+                    ),
                   );
                   return;
                 }
@@ -874,15 +1018,26 @@ class _LinkRows extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 36, height: 4,
+                    width: 36,
+                    height: 4,
                     margin: const EdgeInsets.fromLTRB(0, 12, 0, 8),
-                    decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('链接', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                      child: Text(
+                        '链接',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
                     ),
                   ),
                   ConstrainedBox(
@@ -893,21 +1048,51 @@ class _LinkRows extends StatelessWidget {
                         if (collections.isNotEmpty) ...[
                           Padding(
                             padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                            child: Text('本地集合', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                            child: Text(
+                              '本地集合',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: cs.onSurfaceVariant,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
                           ...collections.map((col) {
                             final isLinked = linked.contains(col.bid);
                             return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                              leading: Icon(Icons.folder_rounded, color: isLinked ? cs.primary : cs.onSurfaceVariant),
-                              title: Text(col.title ?? col.bid, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              leading: Icon(
+                                Icons.folder_rounded,
+                                color: isLinked
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
+                              ),
+                              title: Text(
+                                col.title ?? col.bid,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               subtitle: Text(
-                                col.bid.length > 20 ? '${col.bid.substring(0, 8)}…${col.bid.substring(col.bid.length - 4)}' : col.bid,
-                                style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: cs.onSurfaceVariant),
+                                col.bid.length > 20
+                                    ? '${col.bid.substring(0, 8)}…${col.bid.substring(col.bid.length - 4)}'
+                                    : col.bid,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                  color: cs.onSurfaceVariant,
+                                ),
                               ),
                               trailing: Icon(
-                                isLinked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                                color: isLinked ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5),
+                                isLinked
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked_rounded,
+                                color: isLinked
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant.withValues(
+                                        alpha: 0.5,
+                                      ),
                               ),
                               onTap: () => toggle(col.bid),
                             );
@@ -916,17 +1101,45 @@ class _LinkRows extends StatelessWidget {
                         if (unknownBids.isNotEmpty) ...[
                           Padding(
                             padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                            child: Text('其他链接', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                            child: Text(
+                              '其他链接',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: cs.onSurfaceVariant,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
                           ...unknownBids.map((bid) {
                             final isLinked = linked.contains(bid);
                             return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                              leading: Icon(Icons.link_rounded, color: isLinked ? cs.primary : cs.onSurfaceVariant),
-                              title: Text(bid, style: const TextStyle(fontSize: 13, fontFamily: 'monospace'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              leading: Icon(
+                                Icons.link_rounded,
+                                color: isLinked
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
+                              ),
+                              title: Text(
+                                bid,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontFamily: 'monospace',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               trailing: Icon(
-                                isLinked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                                color: isLinked ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5),
+                                isLinked
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked_rounded,
+                                color: isLinked
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant.withValues(
+                                        alpha: 0.5,
+                                      ),
                               ),
                               onTap: () => toggle(bid),
                             );
@@ -935,7 +1148,10 @@ class _LinkRows extends StatelessWidget {
                         if (collections.isEmpty && unknownBids.isEmpty)
                           Padding(
                             padding: const EdgeInsets.all(24),
-                            child: Text('没有可用的集合', style: TextStyle(color: cs.onSurfaceVariant)),
+                            child: Text(
+                              '没有可用的集合',
+                              style: TextStyle(color: cs.onSurfaceVariant),
+                            ),
                           ),
                       ],
                     ),
@@ -964,9 +1180,12 @@ class _LinkRows extends StatelessWidget {
             width: 44,
             child: Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('链接', style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              )),
+              child: Text(
+                '链接',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -975,7 +1194,9 @@ class _LinkRows extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ...bids.map((bid) {
-                  final match = collections.where((c) => c.bid == bid).firstOrNull;
+                  final match = collections
+                      .where((c) => c.bid == bid)
+                      .firstOrNull;
                   return GestureDetector(
                     onLongPress: () => _showLongPressSheet(context, bid),
                     child: Padding(
@@ -984,11 +1205,31 @@ class _LinkRows extends StatelessWidget {
                           ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(match.title ?? bid, style: TextStyle(fontSize: 14, color: cs.onSurface)),
-                                Text(bid, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontFamily: 'monospace')),
+                                Text(
+                                  match.title ?? bid,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  bid,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: cs.onSurfaceVariant,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
                               ],
                             )
-                          : Text(bid, style: TextStyle(fontSize: 13, color: cs.onSurface, fontFamily: 'monospace')),
+                          : Text(
+                              bid,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: cs.onSurface,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
                     ),
                   );
                 }),
@@ -999,9 +1240,19 @@ class _LinkRows extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.add_rounded, size: 14, color: cs.primary.withValues(alpha: 0.7)),
+                        Icon(
+                          Icons.add_rounded,
+                          size: 14,
+                          color: cs.primary.withValues(alpha: 0.7),
+                        ),
                         const SizedBox(width: 4),
-                        Text('选择集合', style: TextStyle(fontSize: 13, color: cs.primary.withValues(alpha: 0.7))),
+                        Text(
+                          '选择集合',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: cs.primary.withValues(alpha: 0.7),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1051,9 +1302,9 @@ class _MetaRow extends StatelessWidget {
             width: 44,
             child: Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ),
           const SizedBox(width: 8),
@@ -1071,7 +1322,11 @@ class _MetaRow extends StatelessWidget {
 // ── 缩略图 ────────────────────────────────────────────────────
 
 class _ThumbnailImage extends StatefulWidget {
-  const _ThumbnailImage({required this.photo, required this.imageService, this.variant = ImageVariant.squareThumb});
+  const _ThumbnailImage({
+    required this.photo,
+    required this.imageService,
+    this.variant = ImageVariant.squareThumb,
+  });
   final PhotoItem photo;
   final ImageService imageService;
   final ImageVariant variant;
@@ -1082,23 +1337,55 @@ class _ThumbnailImage extends StatefulWidget {
 
 class _ThumbnailImageState extends State<_ThumbnailImage> {
   Uint8List? _bytes;
+  int _loadSerial = 0;
 
   @override
   void initState() {
     super.initState();
+    _loadFromCacheOrNetwork();
+  }
+
+  @override
+  void didUpdateWidget(_ThumbnailImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.photo.cid != widget.photo.cid ||
+        oldWidget.variant != widget.variant) {
+      _bytes = null;
+      _loadFromCacheOrNetwork();
+    }
+  }
+
+  void _loadFromCacheOrNetwork() {
     // 优先内存缓存，避免重复网络请求
-    _bytes = ImageCacheHelper.getMemoryImage(widget.photo.cid, variant: widget.variant)
-        ?? ImageCacheHelper.getMemoryImage(widget.photo.cid, variant: ImageVariant.small)
-        ?? ImageCacheHelper.getMemoryImage(widget.photo.cid, variant: ImageVariant.medium);
+    _bytes =
+        ImageCacheHelper.getMemoryImage(
+          widget.photo.cid,
+          variant: widget.variant,
+        ) ??
+        ImageCacheHelper.getMemoryImage(
+          widget.photo.cid,
+          variant: ImageVariant.small,
+        ) ??
+        ImageCacheHelper.getMemoryImage(
+          widget.photo.cid,
+          variant: ImageVariant.medium,
+        );
     if (_bytes == null) _load();
   }
 
   Future<void> _load() async {
+    final serial = ++_loadSerial;
+    final cid = widget.photo.cid;
     final bytes = await widget.imageService.loadImage(
       widget.photo,
       variant: widget.variant,
     );
-    if (mounted && bytes != null) setState(() => _bytes = bytes);
+    if (mounted &&
+        serial == _loadSerial &&
+        widget.photo.cid == cid &&
+        bytes != null) {
+      setState(() => _bytes = bytes);
+    }
   }
 
   @override
@@ -1143,10 +1430,12 @@ class _PhotoViewer extends StatefulWidget {
   State<_PhotoViewer> createState() => _PhotoViewerState();
 }
 
-class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderStateMixin {
+class _PhotoViewerState extends State<_PhotoViewer>
+    with SingleTickerProviderStateMixin {
   Uint8List? _bytes;
   bool _loading = true;
   bool _error = false;
+  int _loadSerial = 0;
   final TransformationController _transformCtrl = TransformationController();
   late final AnimationController _animCtrl;
   Animation<Matrix4>? _animation;
@@ -1156,17 +1445,24 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
   @override
   void initState() {
     super.initState();
-    _bytes = ImageCacheHelper.getMemoryImage(widget.photo.cid, variant: ImageVariant.small)
-        ?? ImageCacheHelper.getMemoryImage(widget.photo.cid, variant: ImageVariant.medium);
-    if (_bytes != null) _loading = false;
-    _load();
+    _loadFromCacheOrNetwork();
     _transformCtrl.addListener(_onTransformChanged);
-    _animCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    )..addListener(() {
-      if (_animation != null) _transformCtrl.value = _animation!.value;
-    });
+    _animCtrl =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 250),
+        )..addListener(() {
+          if (_animation != null) _transformCtrl.value = _animation!.value;
+        });
+  }
+
+  @override
+  void didUpdateWidget(_PhotoViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.photo.cid != widget.photo.cid) {
+      _transformCtrl.value = Matrix4.identity();
+      _loadFromCacheOrNetwork();
+    }
   }
 
   @override
@@ -1175,6 +1471,21 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
     _transformCtrl.dispose();
     _animCtrl.dispose();
     super.dispose();
+  }
+
+  void _loadFromCacheOrNetwork() {
+    _bytes =
+        ImageCacheHelper.getMemoryImage(
+          widget.photo.cid,
+          variant: ImageVariant.small,
+        ) ??
+        ImageCacheHelper.getMemoryImage(
+          widget.photo.cid,
+          variant: ImageVariant.medium,
+        );
+    _loading = _bytes == null;
+    _error = false;
+    _load();
   }
 
   void _onDoubleTapDown(TapDownDetails details) {
@@ -1188,8 +1499,13 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
       // 初始大小 → 以点击位置为中心放大
       final pos = details.localPosition;
       target = Matrix4.identity()
-        ..translate(-pos.dx * (_zoomScale - 1), -pos.dy * (_zoomScale - 1))
-        ..scale(_zoomScale);
+        ..translateByDouble(
+          -pos.dx * (_zoomScale - 1),
+          -pos.dy * (_zoomScale - 1),
+          0,
+          1,
+        )
+        ..scaleByDouble(_zoomScale, _zoomScale, 1, 1);
       widget.onZoomIn?.call(); // 通知父级隐藏 UI
     }
 
@@ -1212,14 +1528,26 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
   }
 
   Future<void> _load() async {
+    final serial = ++_loadSerial;
+    final cid = widget.photo.cid;
     try {
       final bytes = await widget.imageService.loadImage(
         widget.photo,
         variant: ImageVariant.original,
       );
-      if (mounted) setState(() { _bytes = bytes; _loading = false; });
+      if (mounted && serial == _loadSerial && widget.photo.cid == cid) {
+        setState(() {
+          _bytes = bytes;
+          _loading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _error = true; });
+      if (mounted && serial == _loadSerial && widget.photo.cid == cid) {
+        setState(() {
+          _loading = false;
+          _error = true;
+        });
+      }
     }
   }
 
@@ -1229,7 +1557,10 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
       return const ColoredBox(
         color: Colors.black,
         child: Center(
-          child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+          child: CircularProgressIndicator(
+            color: Colors.white54,
+            strokeWidth: 2,
+          ),
         ),
       );
     }
@@ -1240,11 +1571,19 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.broken_image_outlined, color: Colors.white24, size: 56),
+              const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white24,
+                size: 56,
+              ),
               const SizedBox(height: 12),
-              Text('图片加载失败',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.3), fontSize: 13)),
+              Text(
+                '图片加载失败',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),
@@ -1261,7 +1600,11 @@ class _PhotoViewerState extends State<_PhotoViewer> with SingleTickerProviderSta
           minScale: 0.5,
           maxScale: 5.0,
           child: Center(
-            child: Image.memory(_bytes!, fit: BoxFit.contain, gaplessPlayback: true),
+            child: Image.memory(
+              _bytes!,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
           ),
         ),
       ),

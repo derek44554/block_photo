@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:block_flutter/block_flutter.dart';
@@ -40,7 +41,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
   bool _syncing = false;
   int _syncFetched = 0;
   int _syncTotal = 0;
-  ImageService? _imageService;
+  late final ImageService _imageService;
+  int _querySerial = 0;
+  int _gridCrossAxisCount = 3;
+  double? _gridItemExtent;
+  final Set<String> _preloadingThumbs = {};
 
   // "全部"视图已完成初次加载，切回时不重复请求
   bool _allViewLoaded = false;
@@ -63,6 +68,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
+    _imageService = ImageService(context.read<ConnectionProvider>());
     _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMore(reset: true);
@@ -91,14 +97,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _loadMore();
     }
     // 预加载当前可见区域后方的图片
-    if (_imageService != null && _photos.isNotEmpty) {
-      final itemHeight = _scrollCtrl.position.viewportDimension / 3;
+    final itemHeight =
+        _gridItemExtent ?? _scrollCtrl.position.viewportDimension / 3;
+    if (_photos.isNotEmpty && itemHeight > 0) {
       final currentRow = (_scrollCtrl.position.pixels / itemHeight).floor();
       final visibleRows = (_scrollCtrl.position.viewportDimension / itemHeight)
           .ceil();
-      final preloadStart = (currentRow + visibleRows) * 3;
+      final preloadStart = (currentRow + visibleRows) * _gridCrossAxisCount;
       if (preloadStart < _photos.length) {
-        _preloadImages(_imageService!, preloadStart, 12);
+        _preloadImages(_imageService, preloadStart, _gridCrossAxisCount * 4);
       }
     }
   }
@@ -113,22 +120,26 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _loadMore({bool reset = false}) async {
-    if (_loading) return;
+    if (_loading && !reset) return;
     if (!reset && !_hasMore) return;
+
+    final serial = reset ? ++_querySerial : _querySerial;
 
     // tag 选中时走独立的直接请求路径（不缓存）
     if (_selectedTag != null && _selectedCollectionIndex != null) {
-      await _loadByTag(reset: reset);
+      await _loadByTag(reset: reset, serial: serial);
       return;
     }
 
     final bids = _getBidsToQuery();
     if (bids.isEmpty) {
+      if (!mounted || serial != _querySerial) return;
       setState(() {
         _photos.clear();
         _allBids = [];
         _hasMore = false;
         _loading = false;
+        _syncing = false;
       });
       return;
     }
@@ -144,6 +155,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (reset) {
         _page = 1;
         _allBids = await _loadCachedBids(bids, tag: _selectedTag);
+        if (!mounted || serial != _querySerial) return;
 
         if (_allBids.isNotEmpty) {
           final blocks = await service.getLocalBlocks(
@@ -151,28 +163,27 @@ class _GalleryScreenState extends State<GalleryScreen> {
             page: 1,
             limit: 40,
           );
+          if (!mounted || serial != _querySerial) return;
           final photos = blocks.map(PhotoItem.fromBlock).toList();
-          if (mounted) {
-            setState(() {
-              _photos
-                ..clear()
-                ..addAll(photos);
-              _page = 2;
-              _hasMore = photos.length == 40;
-              _loading = false;
-            });
-          }
+          setState(() {
+            _photos
+              ..clear()
+              ..addAll(photos);
+            _page = 2;
+            _hasMore = photos.length == 40;
+            _loading = false;
+          });
           // 预加载第一页图片到内存
-          if (_imageService != null) {
-            _preloadImages(_imageService!, 0, photos.length);
-          }
+          _preloadImages(_imageService, 0, photos.length);
         } else {
           // 没有本地缓存，保持 loading 状态直到同步完成
-          if (mounted) setState(() => _loading = true);
+          if (mounted && serial == _querySerial) {
+            setState(() => _loading = true);
+          }
         }
 
         // 无论有没有本地缓存都后台同步
-        _syncInBackground(bids, tag: _selectedTag);
+        _syncInBackground(bids, tag: _selectedTag, serial: serial);
         return;
       }
 
@@ -182,24 +193,27 @@ class _GalleryScreenState extends State<GalleryScreen> {
         page: _page,
         limit: 40,
       );
+      if (!mounted || serial != _querySerial) return;
       final photos = blocks.map(PhotoItem.fromBlock).toList();
-      if (mounted) {
-        setState(() {
-          _photos.addAll(photos);
-          _page++;
-          _hasMore = photos.length == 40;
-        });
-      }
+      setState(() {
+        _photos.addAll(photos);
+        _page++;
+        _hasMore = photos.length == 40;
+      });
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted && serial == _querySerial) {
+        setState(() => _error = e.toString());
+      }
     } finally {
-      if (mounted && !_syncing) setState(() => _loading = false);
+      if (mounted && serial == _querySerial && !_syncing) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   /// tag 选中时直接请求，不走本地缓存
-  Future<void> _loadByTag({bool reset = false}) async {
-    if (_loading) return;
+  Future<void> _loadByTag({bool reset = false, required int serial}) async {
+    if (_loading && !reset) return;
     final provider = context.read<PhotoProvider>();
     final collectionBid = provider.collections[_selectedCollectionIndex!].bid;
     final tag = _selectedTag!;
@@ -220,25 +234,28 @@ class _GalleryScreenState extends State<GalleryScreen> {
         page: _page,
         limit: 40,
       );
+      if (!mounted || serial != _querySerial) return;
       final photos = response.map(PhotoItem.fromBlock).toList();
-      if (mounted) {
-        setState(() {
-          if (reset) {
-            _photos
-              ..clear()
-              ..addAll(photos);
-            _page = 2;
-          } else {
-            _photos.addAll(photos);
-            _page++;
-          }
-          _hasMore = photos.length == 40;
-        });
-      }
+      setState(() {
+        if (reset) {
+          _photos
+            ..clear()
+            ..addAll(photos);
+          _page = 2;
+        } else {
+          _photos.addAll(photos);
+          _page++;
+        }
+        _hasMore = photos.length == 40;
+      });
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted && serial == _querySerial) {
+        setState(() => _error = e.toString());
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && serial == _querySerial) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -267,8 +284,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Future<void> _syncInBackground(
     List<String> collectionBids, {
     String? tag,
+    required int serial,
   }) async {
-    if (_syncing) return;
+    if (!mounted || serial != _querySerial) return;
     setState(() {
       _syncing = true;
       _syncFetched = 0;
@@ -280,7 +298,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         collectionBids: collectionBids,
         tag: tag,
         onProgress: (fetched, total) {
-          if (mounted) {
+          if (mounted && serial == _querySerial) {
             setState(() {
               _syncFetched = fetched;
               _syncTotal = total;
@@ -289,41 +307,40 @@ class _GalleryScreenState extends State<GalleryScreen> {
         },
       );
       await _saveCachedBids(collectionBids, newBids, tag: tag);
-      if (mounted) {
-        // 同步完成后刷新展示
-        _allBids = newBids;
-        _page = 1;
-        final blocks = await service.getLocalBlocks(
-          bids: _allBids,
-          page: 1,
-          limit: 40,
-        );
-        final photos = blocks.map(PhotoItem.fromBlock).toList();
-        if (mounted) {
-          setState(() {
-            _photos
-              ..clear()
-              ..addAll(photos);
-            _page = 2;
-            _hasMore = photos.length == 40;
-          });
-        }
-        if (_imageService != null) {
-          _preloadImages(_imageService!, 0, photos.length);
-        }
-        // 如果是"全部"视图，保存快照
-        if (_selectedCollectionIndex == null && _selectedTag == null) {
-          _allViewLoaded = true;
-          _allViewPhotos = List.from(_photos);
-          _allViewBids = List.from(_allBids);
-          _allViewPage = _page;
-          _allViewHasMore = _hasMore;
-        }
+      if (!mounted || serial != _querySerial) return;
+
+      // 同步完成后刷新展示
+      _allBids = newBids;
+      _page = 1;
+      final blocks = await service.getLocalBlocks(
+        bids: _allBids,
+        page: 1,
+        limit: 40,
+      );
+      if (!mounted || serial != _querySerial) return;
+
+      final photos = blocks.map(PhotoItem.fromBlock).toList();
+      setState(() {
+        _photos
+          ..clear()
+          ..addAll(photos);
+        _page = 2;
+        _hasMore = photos.length == 40;
+      });
+      _preloadImages(_imageService, 0, photos.length);
+
+      // 如果是"全部"视图，保存快照
+      if (_selectedCollectionIndex == null && _selectedTag == null) {
+        _allViewLoaded = true;
+        _allViewPhotos = List.from(_photos);
+        _allViewBids = List.from(_allBids);
+        _allViewPage = _page;
+        _allViewHasMore = _hasMore;
       }
     } catch (_) {
       // 后台同步失败不影响已展示内容
     } finally {
-      if (mounted) {
+      if (mounted && serial == _querySerial) {
         setState(() {
           _syncing = false;
           _loading = false;
@@ -332,14 +349,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
   }
 
-  Future<void> _preloadImages(
-    ImageService imageService,
-    int fromIndex,
-    int count,
-  ) async {
+  void _preloadImages(ImageService imageService, int fromIndex, int count) {
     final end = (fromIndex + count).clamp(0, _photos.length);
     for (var i = fromIndex; i < end; i++) {
       final photo = _photos[i];
+      if (photo.cid.isEmpty || _preloadingThumbs.contains(photo.cid)) {
+        continue;
+      }
       if (ImageCacheHelper.getMemoryImage(
             photo.cid,
             variant: ImageVariant.squareThumb,
@@ -347,22 +363,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
           null) {
         continue;
       }
-      final file = await ImageCacheHelper.getCachedImage(
-        photo.cid,
-        variant: ImageVariant.squareThumb,
+      _preloadingThumbs.add(photo.cid);
+      unawaited(
+        imageService
+            .loadImage(photo, variant: ImageVariant.squareThumb)
+            .whenComplete(() => _preloadingThumbs.remove(photo.cid)),
       );
-      if (file != null) {
-        final bytes = await file.readAsBytes();
-        ImageCacheHelper.cacheMemoryImage(
-          photo.cid,
-          bytes,
-          variant: ImageVariant.squareThumb,
-        );
-      }
     }
   }
 
   Future<void> _refresh() async {
+    _invalidateAllViewSnapshot();
     setState(() {
       _page = 1;
       _hasMore = true;
@@ -371,10 +382,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
     await _loadMore(reset: true);
   }
 
+  void _invalidateAllViewSnapshot() {
+    _allViewLoaded = false;
+    _allViewPhotos = [];
+    _allViewBids = [];
+    _allViewPage = 1;
+    _allViewHasMore = true;
+  }
+
   void _selectCollection(int? index) {
     // 切回"全部"且已有快照，直接恢复不重新请求
     if (index == null && _allViewLoaded) {
       setState(() {
+        _querySerial++;
         _selectedCollectionIndex = null;
         _selectedTag = null;
         _macDetailInitialIndex = null;
@@ -385,6 +405,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _page = _allViewPage;
         _hasMore = _allViewHasMore;
         _error = null;
+        _loading = false;
+        _syncing = false;
+        _preloadingThumbs.clear();
       });
       _scaffoldKey.currentState?.closeEndDrawer();
       return;
@@ -396,8 +419,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _page = 1;
       _hasMore = true;
       _error = null;
+      _loading = false;
+      _syncing = false;
       _photos.clear();
       _allBids = [];
+      _preloadingThumbs.clear();
     });
     _scaffoldKey.currentState?.closeEndDrawer();
     _loadMore(reset: true);
@@ -413,8 +439,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _page = 1;
       _hasMore = true;
       _error = null;
+      _loading = false;
+      _syncing = false;
       _photos.clear();
       _allBids = [];
+      _preloadingThumbs.clear();
     });
     _scaffoldKey.currentState?.closeEndDrawer();
     _loadMore(reset: true);
@@ -430,13 +459,26 @@ class _GalleryScreenState extends State<GalleryScreen> {
     return 'BlockPhoto';
   }
 
+  List<String> _defaultUploadCollectionBids() {
+    final provider = context.read<PhotoProvider>();
+    if (_selectedCollectionIndex != null &&
+        _selectedCollectionIndex! < provider.collections.length) {
+      return [provider.collections[_selectedCollectionIndex!].bid];
+    }
+    return provider.albumCollections.map((c) => c.bid).toList();
+  }
+
   Future<void> _openUpload() async {
     final isMacDesktop = !kIsWeb && Platform.isMacOS;
+    final initialCollectionBids = _defaultUploadCollectionBids();
     if (isMacDesktop) {
       final paneNavigator = _macPaneNavigatorKey.currentState;
       if (paneNavigator != null) {
         final result = await paneNavigator.push<bool>(
-          MaterialPageRoute(builder: (_) => const UploadScreen()),
+          MaterialPageRoute(
+            builder: (_) =>
+                UploadScreen(initialCollectionBids: initialCollectionBids),
+          ),
         );
         if (result == true && mounted) {
           await _refresh();
@@ -447,7 +489,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => const UploadScreen()),
+      MaterialPageRoute(
+        builder: (_) =>
+            UploadScreen(initialCollectionBids: initialCollectionBids),
+      ),
     );
     if (result == true) {
       await _refresh();
@@ -468,8 +513,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Widget build(BuildContext context) {
     final connProvider = context.watch<ConnectionProvider>();
     final photoProvider = context.watch<PhotoProvider>();
-    final imageService = ImageService(connProvider);
-    _imageService = imageService;
+    final imageService = _imageService;
     final hasCollections = photoProvider.collections.isNotEmpty;
 
     return LayoutBuilder(
@@ -578,14 +622,23 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 await _openSettings();
               },
               onDelete: (col) {
-                context.read<PhotoProvider>().removeCollection(col.bid);
+                _invalidateAllViewSnapshot();
+                unawaited(
+                  context.read<PhotoProvider>().removeCollection(col.bid),
+                );
                 if (_selectedCollectionIndex != null) {
                   setState(() => _selectedCollectionIndex = null);
-                  _loadMore(reset: true);
                 }
+                _loadMore(reset: true);
               },
               onToggleDefault: (col, isDefault) {
-                context.read<PhotoProvider>().toggleDefault(col.bid, isDefault);
+                _invalidateAllViewSnapshot();
+                unawaited(
+                  context.read<PhotoProvider>().toggleDefault(
+                    col.bid,
+                    isDefault,
+                  ),
+                );
                 // 如果当前在"全部"视图，刷新以反映新的默认集合
                 if (_selectedCollectionIndex == null) _loadMore(reset: true);
               },
@@ -643,18 +696,24 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             : null,
                         onSettings: _openSettings,
                         onDelete: (col) {
-                          context.read<PhotoProvider>().removeCollection(
-                            col.bid,
+                          _invalidateAllViewSnapshot();
+                          unawaited(
+                            context.read<PhotoProvider>().removeCollection(
+                              col.bid,
+                            ),
                           );
                           if (_selectedCollectionIndex != null) {
                             setState(() => _selectedCollectionIndex = null);
-                            _loadMore(reset: true);
                           }
+                          _loadMore(reset: true);
                         },
                         onToggleDefault: (col, isDefault) {
-                          context.read<PhotoProvider>().toggleDefault(
-                            col.bid,
-                            isDefault,
+                          _invalidateAllViewSnapshot();
+                          unawaited(
+                            context.read<PhotoProvider>().toggleDefault(
+                              col.bid,
+                              isDefault,
+                            ),
                           );
                           if (_selectedCollectionIndex == null) {
                             _loadMore(reset: true);
@@ -792,7 +851,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     if (context
                         .read<ConnectionProvider>()
                         .hasActiveConnection) {
-                      _loadMore();
+                      _loadMore(reset: true);
                     }
                   }),
               icon: const Icon(Icons.add_rounded),
@@ -822,6 +881,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     (minItemWidth + crossSpacing))
                 .floor()
                 .clamp(isMac ? 4 : 3, isMac ? 9 : 8);
+        final horizontalPadding = isMac ? 8.0 : 4.0;
+        final itemWidth =
+            (constraints.maxWidth -
+                crossSpacing * (crossAxisCount - 1) -
+                horizontalPadding) /
+            crossAxisCount;
+        _gridCrossAxisCount = crossAxisCount;
+        _gridItemExtent = itemWidth + mainSpacing;
 
         return GridView.builder(
           key: ValueKey('$_selectedCollectionIndex$_selectedTag'),
@@ -838,12 +905,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
           itemBuilder: (context, index) {
             if (index >= _photos.length) return _buildLoadingPlaceholder();
             final photo = _photos[index];
-            final horizontalPadding = isMac ? 8.0 : 4.0;
-            final itemWidth =
-                (constraints.maxWidth -
-                    crossSpacing * (crossAxisCount - 1) -
-                    horizontalPadding) /
-                crossAxisCount;
             return PhotoGridItem(
               photo: photo,
               imageService: imageService,

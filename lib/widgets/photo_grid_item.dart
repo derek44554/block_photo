@@ -24,6 +24,7 @@ class _PhotoGridItemState extends State<PhotoGridItem>
     with SingleTickerProviderStateMixin {
   Uint8List? _bytes;
   bool _loading = true;
+  int _loadSerial = 0;
   late final AnimationController _shimmerCtrl;
 
   @override
@@ -42,6 +43,7 @@ class _PhotoGridItemState extends State<PhotoGridItem>
     if (oldWidget.photo.cid != widget.photo.cid) {
       _bytes = null;
       _loading = true;
+      _shimmerCtrl.repeat();
       _load();
     }
   }
@@ -53,30 +55,32 @@ class _PhotoGridItemState extends State<PhotoGridItem>
   }
 
   Future<void> _load() async {
+    final serial = ++_loadSerial;
+    final cid = widget.photo.cid;
+
     // 先检查内存缓存，命中则直接显示无需等待
     final mem = ImageCacheHelper.getMemoryImage(
-      widget.photo.cid,
+      cid,
       variant: ImageVariant.squareThumb,
     );
     if (mem != null) {
-      if (mounted) {
-        setState(() {
-          _bytes = mem;
-          _loading = false;
-        });
-      }
+      _finishLoad(serial, cid, mem);
       return;
     }
     final bytes = await widget.imageService.loadImage(
       widget.photo,
       variant: ImageVariant.squareThumb,
     );
-    if (mounted) {
-      setState(() {
-        _bytes = bytes;
-        _loading = false;
-      });
-    }
+    _finishLoad(serial, cid, bytes);
+  }
+
+  void _finishLoad(int serial, String cid, Uint8List? bytes) {
+    if (!mounted || serial != _loadSerial || widget.photo.cid != cid) return;
+    _shimmerCtrl.stop();
+    setState(() {
+      _bytes = bytes;
+      _loading = false;
+    });
   }
 
   @override
@@ -85,24 +89,31 @@ class _PhotoGridItemState extends State<PhotoGridItem>
     final isMac = Theme.of(context).platform == TargetPlatform.macOS;
     final radius = isMac ? 12.0 : 0.0;
 
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Hero(
-        tag: widget.photo.heroTag,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: _loading
-              ? _ShimmerBox(controller: _shimmerCtrl)
-              : _bytes != null
-              ? Image.memory(_bytes!, fit: BoxFit.cover, gaplessPlayback: true)
-              : Container(
-                  color: cs.surfaceContainerLow,
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.3),
-                    size: 24,
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Hero(
+          tag: widget.photo.heroTag,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: _loading
+                ? _ShimmerBox(controller: _shimmerCtrl)
+                : _bytes != null
+                ? Image.memory(
+                    _bytes!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.low,
+                  )
+                : Container(
+                    color: cs.surfaceContainerLow,
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                      size: 24,
+                    ),
                   ),
-                ),
+          ),
         ),
       ),
     );
