@@ -25,15 +25,16 @@ class BlockService {
     if (collectionBids.isEmpty) return [];
 
     // 单集合用 /link/main/multiple（支持 tag），多集合用 bids_by_targets
-    final List<String> allBids;
+    final List<String> rawBids;
     if (collectionBids.length == 1) {
-      allBids = await _getBidsByMainWithTag(collectionBids.first, tag: tag);
+      rawBids = await _getBidsByMainWithTag(collectionBids.first, tag: tag);
     } else {
-      allBids = await _api.getBidsByTargets(
+      rawBids = await _api.getBidsByTargets(
         bids: collectionBids,
         order: 'desc',
       );
     }
+    final allBids = _uniqueBids(rawBids);
 
     final missing = <String>[];
     for (final bid in allBids) {
@@ -72,10 +73,11 @@ class BlockService {
     required int page,
     required int limit,
   }) async {
+    final uniqueBids = _uniqueBids(bids);
     final start = (page - 1) * limit;
-    if (start >= bids.length) return [];
-    final end = (start + limit).clamp(0, bids.length);
-    final pageBids = bids.sublist(start, end);
+    if (start >= uniqueBids.length) return [];
+    final end = (start + limit).clamp(0, uniqueBids.length);
+    final pageBids = uniqueBids.sublist(start, end);
 
     final result = <BlockModel>[];
     for (final bid in pageBids) {
@@ -162,10 +164,13 @@ class BlockService {
     if (data is! Map<String, dynamic>) return [];
     final items = data['items'];
     if (items is! List) return [];
+    final seen = <String>{};
     return items
         .whereType<Map<String, dynamic>>()
         .map((e) => BlockModel(data: e))
         .where((block) {
+          final bid = block.maybeString('bid');
+          if (bid != null && !seen.add(bid)) return false;
           final model = block.maybeString('model');
           if (model != _fileModelId) return false;
           final ipfs = block.getMap('ipfs');
@@ -214,13 +219,24 @@ class BlockService {
       for (final item in items.whereType<Map<String, dynamic>>()) {
         final block = BlockModel(data: item);
         final bid = block.maybeString('bid');
-        if (bid != null) {
+        if (bid != null && !result.contains(bid)) {
           await BlockCache.instance.put(bid, block);
           result.add(bid);
         }
       }
       if (items.length < limit) break;
       page++;
+    }
+    return result;
+  }
+
+  List<String> _uniqueBids(Iterable<String> bids) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final bid in bids) {
+      final trimmed = bid.trim();
+      if (trimmed.isEmpty || !seen.add(trimmed)) continue;
+      result.add(trimmed);
     }
     return result;
   }

@@ -267,7 +267,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final prefs = await SharedPreferences.getInstance();
     final key =
         'gallery_bids_${collectionBids.join(',')}${tag != null ? '_$tag' : ''}';
-    return prefs.getStringList(key) ?? [];
+    return _uniqueBids(prefs.getStringList(key) ?? []);
   }
 
   Future<void> _saveCachedBids(
@@ -278,7 +278,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final prefs = await SharedPreferences.getInstance();
     final key =
         'gallery_bids_${collectionBids.join(',')}${tag != null ? '_$tag' : ''}';
-    await prefs.setStringList(key, bids);
+    await prefs.setStringList(key, _uniqueBids(bids));
+  }
+
+  List<String> _uniqueBids(Iterable<String> bids) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final bid in bids) {
+      final trimmed = bid.trim();
+      if (trimmed.isEmpty || !seen.add(trimmed)) continue;
+      result.add(trimmed);
+    }
+    return result;
   }
 
   Future<void> _syncInBackground(
