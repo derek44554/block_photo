@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:block_flutter/block_flutter.dart';
@@ -29,6 +32,7 @@ class PhotoDetailScreen extends StatefulWidget {
 class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   late final PageController _pageCtrl;
   late final ScrollController _thumbCtrl;
+  Timer? _scrollResetTimer;
   late int _current;
   late List<PhotoItem> _photos; // 可变副本，支持本地更新
   final Set<int> _fetched = {}; // 已拉取最新数据的 index
@@ -46,6 +50,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   // 用于 Listener 追踪原始指针
   Offset? _pointerStart;
   bool _trackingDrag = false;
+  Offset _panZoomTotal = Offset.zero;
+  bool _trackingPanZoom = false;
+  bool _ignoringPanZoom = false;
 
   static const double _dismissThreshold = 60;
   static const double _thumbSize = 52;
@@ -71,6 +78,7 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
 
   @override
   void dispose() {
+    _scrollResetTimer?.cancel();
     _pageCtrl.dispose();
     _thumbCtrl.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -167,7 +175,10 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       }
     }
 
-    final dy = e.delta.dy;
+    _applyVerticalDelta(e.delta.dy);
+  }
+
+  void _applyVerticalDelta(double dy) {
     setState(() {
       _uiVisible = false; // 开始拖动就隐藏 UI
       if (dy < 0) {
@@ -187,6 +198,89 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     _trackingDrag = false;
     _pointerStart = null;
 
+    _finishVerticalInteraction();
+  }
+
+  void _onPointerCancel(PointerCancelEvent e) {
+    _trackingDrag = false;
+    _pointerStart = null;
+    setState(() {
+      _dragOffset = 0;
+      _bgOpacity = 1.0;
+    });
+  }
+
+  void _onPointerSignal(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent || _currentScale > 1.05) return;
+
+    if (e.scrollDelta.dy.abs() < e.scrollDelta.dx.abs()) return;
+
+    final dy = -e.scrollDelta.dy * 0.6;
+    if (dy.abs() < 0.5) return;
+
+    _scrollResetTimer?.cancel();
+
+    _applyVerticalDelta(dy);
+
+    if (_dragOffset <= -60) {
+      setState(() {
+        _dragOffset = 0;
+        _bgOpacity = 1.0;
+      });
+      _openInfo();
+      return;
+    }
+
+    if (_dragOffset >= _dismissThreshold) {
+      Navigator.of(context).pop(_current);
+      return;
+    }
+
+    _scrollResetTimer = Timer(const Duration(milliseconds: 140), () {
+      if (!mounted) return;
+      _finishVerticalInteraction();
+    });
+  }
+
+  void _onPointerPanZoomStart(PointerPanZoomStartEvent e) {
+    if (_currentScale > 1.05) return;
+    _scrollResetTimer?.cancel();
+    _panZoomTotal = Offset.zero;
+    _trackingPanZoom = false;
+    _ignoringPanZoom = false;
+  }
+
+  void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (_currentScale > 1.05 || _ignoringPanZoom) return;
+
+    _panZoomTotal += e.panDelta;
+
+    if (!_trackingPanZoom) {
+      if (_panZoomTotal.dy.abs() >= _panZoomTotal.dx.abs() &&
+          _panZoomTotal.dy.abs() > 5) {
+        _trackingPanZoom = true;
+      } else if (_panZoomTotal.dx.abs() > _panZoomTotal.dy.abs() &&
+          _panZoomTotal.dx.abs() > 5) {
+        _ignoringPanZoom = true;
+        return;
+      } else {
+        return;
+      }
+    }
+
+    _applyVerticalDelta(e.panDelta.dy);
+  }
+
+  void _onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    if (_trackingPanZoom) {
+      _finishVerticalInteraction();
+    }
+    _panZoomTotal = Offset.zero;
+    _trackingPanZoom = false;
+    _ignoringPanZoom = false;
+  }
+
+  void _finishVerticalInteraction() {
     if (_dragOffset > _dismissThreshold) {
       Navigator.of(context).pop(_current);
       return;
@@ -206,15 +300,6 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     });
   }
 
-  void _onPointerCancel(PointerCancelEvent e) {
-    _trackingDrag = false;
-    _pointerStart = null;
-    setState(() {
-      _dragOffset = 0;
-      _bgOpacity = 1.0;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final photo = _photos[_current];
@@ -227,6 +312,10 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
         onPointerMove: _onPointerMove,
         onPointerUp: _onPointerUp,
         onPointerCancel: _onPointerCancel,
+        onPointerSignal: _onPointerSignal,
+        onPointerPanZoomStart: _onPointerPanZoomStart,
+        onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+        onPointerPanZoomEnd: _onPointerPanZoomEnd,
         child: Stack(
           children: [
             // ── 只有图片在 PageView 中左右滑动 ──
