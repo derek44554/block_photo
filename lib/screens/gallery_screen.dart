@@ -470,25 +470,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
     return 'BlockPhoto';
   }
 
-  List<String> _defaultUploadCollectionBids() {
-    final provider = context.read<PhotoProvider>();
-    if (_selectedCollectionIndex != null &&
-        _selectedCollectionIndex! < provider.collections.length) {
-      return [provider.collections[_selectedCollectionIndex!].bid];
-    }
-    return provider.albumCollections.map((c) => c.bid).toList();
-  }
-
   Future<void> _openUpload() async {
     final isMacDesktop = !kIsWeb && Platform.isMacOS;
-    final initialCollectionBids = _defaultUploadCollectionBids();
     if (isMacDesktop) {
       final paneNavigator = _macPaneNavigatorKey.currentState;
       if (paneNavigator != null) {
         final result = await paneNavigator.push<bool>(
           MaterialPageRoute(
-            builder: (_) =>
-                UploadScreen(initialCollectionBids: initialCollectionBids),
+            builder: (_) => const UploadScreen(),
           ),
         );
         if (result == true && mounted) {
@@ -501,8 +490,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            UploadScreen(initialCollectionBids: initialCollectionBids),
+        builder: (_) => const UploadScreen(),
       ),
     );
     if (result == true) {
