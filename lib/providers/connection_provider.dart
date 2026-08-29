@@ -96,6 +96,15 @@ class ConnectionProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateConnection(int index, ConnectionModel connection) async {
+    if (index < 0 || index >= _connections.length) return;
+    final wasActive = _activeConnection?.address == _connections[index].address;
+    _connections[index] = connection;
+    if (wasActive) _activeConnection = connection;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> removeConnection(int index) async {
     if (index < 0 || index >= _connections.length) return;
     _connections.removeAt(index);

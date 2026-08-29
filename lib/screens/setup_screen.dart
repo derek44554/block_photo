@@ -35,7 +35,7 @@ class _SetupScreenState extends State<SetupScreen> {
     super.dispose();
   }
 
-  Future<void> _testAndSave() async {
+  Future<void> _testAndSave({int? editIndex, BuildContext? dialogContext}) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _testing = true;
@@ -59,23 +59,74 @@ class _SetupScreenState extends State<SetupScreen> {
 
       if (!mounted) return;
       final provider = context.read<ConnectionProvider>();
-      await provider.addConnection(
-        connection.copyWith(
-          status: ConnectionStatus.connected,
-          nodeData: nodeData,
-        ),
+      final saved = connection.copyWith(
+        status: ConnectionStatus.connected,
+        nodeData: nodeData,
       );
+      if (editIndex == null) {
+        await provider.addConnection(saved);
+      } else {
+        await provider.updateConnection(editIndex, saved);
+      }
 
       final ipfs = _ipfsCtrl.text.trim();
       if (ipfs.isNotEmpty) await provider.setIpfsEndpoint(ipfs);
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(dialogContext ?? context).pop();
     } catch (e) {
       setState(() => _testError = '连接失败：$e');
     } finally {
       if (mounted) setState(() => _testing = false);
     }
+  }
+
+  Future<void> _showConnectionDialog({int? editIndex, ConnectionModel? existing}) async {
+    _nameCtrl.text = existing?.name ?? '我的节点';
+    _addressCtrl.text = existing?.address ?? '';
+    _keyCtrl.text = existing?.keyBase64 ?? '';
+    _keyVisible = false;
+    _testError = null;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(editIndex == null ? '添加节点' : '修改节点', style: const TextStyle(fontSize: 22)),
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(controller: _nameCtrl, decoration: const InputDecoration(labelText: '节点名称', isDense: true), validator: (v) => v == null || v.trim().isEmpty ? '请输入名称' : null),
+                const SizedBox(height: 10),
+                TextFormField(controller: _addressCtrl, decoration: const InputDecoration(labelText: '节点地址', hintText: 'http://192.168.1.100:8080', isDense: true), keyboardType: TextInputType.url, validator: (v) => v == null || v.trim().isEmpty ? '请输入地址' : (!v.trim().startsWith('http') ? '地址需以 http:// 开头' : null)),
+                const SizedBox(height: 10),
+                TextFormField(controller: _keyCtrl, obscureText: !_keyVisible, decoration: InputDecoration(labelText: 'AES 密钥（Base64）', isDense: true, suffixIcon: IconButton(icon: Icon(_keyVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded), onPressed: () => setState(() => _keyVisible = !_keyVisible))), validator: (v) => v == null || v.trim().isEmpty ? '请输入密钥' : null),
+                if (_testError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_testError!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          Builder(
+            builder: (dialogContext) => TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(72, 40)),
+              onPressed: _testing ? null : () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+          ),
+          Builder(
+            builder: (dialogContext) => FilledButton.icon(
+              style: FilledButton.styleFrom(minimumSize: const Size(150, 42), textStyle: const TextStyle(fontSize: 15)),
+              onPressed: _testing ? null : () => _testAndSave(editIndex: editIndex, dialogContext: dialogContext),
+              icon: _testing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check),
+              label: Text(_testing ? '连接中...' : '测试并保存'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveIpfsOnly() async {
@@ -149,17 +200,29 @@ class _SetupScreenState extends State<SetupScreen> {
                   isActive: isActive,
                   onSwitch: isActive ? null : () => provider.setActive(i),
                   onDelete: () => _confirmDelete(context, i, c.name),
+                  onEdit: () => _showConnectionDialog(editIndex: i, existing: c),
                 );
               }),
               const SizedBox(height: 20),
             ],
 
-            // ── 添加节点 ──
-            _SectionLabel(label: '添加节点'),
-            _Card(
-              child: Form(
-                key: _formKey,
-                child: Column(
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _showConnectionDialog(),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('添加节点'),
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /*
                   children: [
                     _CardRow(
                       icon: Icons.label_outline_rounded,
@@ -274,12 +337,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
+  */
 
   void _confirmDelete(BuildContext context, int index, String name) {
     showDialog<void>(
@@ -316,6 +374,7 @@ class _NodeCard extends StatelessWidget {
     required this.connection,
     required this.isActive,
     required this.onDelete,
+    required this.onEdit,
     this.onSwitch,
   });
 
@@ -323,6 +382,7 @@ class _NodeCard extends StatelessWidget {
   final bool isActive;
   final VoidCallback? onSwitch;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -417,6 +477,11 @@ class _NodeCard extends StatelessWidget {
                 ),
                 child: const Text('切换'),
               ),
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 20),
+              visualDensity: VisualDensity.compact,
+              onPressed: onEdit,
+            ),
             IconButton(
               icon: Icon(
                 Icons.delete_outline_rounded,

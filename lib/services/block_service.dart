@@ -3,6 +3,7 @@ import '../providers/connection_provider.dart';
 
 const _fileModelId = 'c4238dd0d3d95db7b473adb449f6d282';
 const _batchSize = 20;
+const _linkPageSize = 20;
 
 class BlockService {
   BlockService(this._connectionProvider);
@@ -97,7 +98,7 @@ class BlockService {
   Future<List<BlockModel>> getPhotosByCollections({
     required List<String> collectionBids,
     int page = 1,
-    int limit = 40,
+    int limit = _linkPageSize,
   }) async {
     if (collectionBids.isEmpty) return [];
     final response = await _api.getLinksByTargets(
@@ -184,17 +185,8 @@ class BlockService {
     required String collectionBid,
     required String tag,
     int page = 1,
-    int limit = 40,
-  }) async {
-    final response = await _api.getLinksByMain(
-      bid: collectionBid,
-      page: page,
-      limit: limit,
-      tag: tag,
-      order: 'desc',
-    );
-    return _extractFileBlocks(response);
-  }
+    int limit = _linkPageSize,
+  }) => _getFileBlocksByMain(collectionBid, page: page, limit: limit, tag: tag);
 
   /// 通过 /link/main/multiple 分页拉取所有 BID（支持 tag 过滤）
   Future<List<String>> _getBidsByMainWithTag(
@@ -203,12 +195,12 @@ class BlockService {
   }) async {
     final result = <String>[];
     int page = 1;
-    const limit = 100;
     while (true) {
       final response = await _api.getLinksByMain(
         bid: collectionBid,
         page: page,
-        limit: limit,
+        limit: _linkPageSize,
+        model: _fileModelId,
         tag: tag,
         order: 'desc',
       );
@@ -218,16 +210,49 @@ class BlockService {
       if (items is! List || items.isEmpty) break;
       for (final item in items.whereType<Map<String, dynamic>>()) {
         final block = BlockModel(data: item);
+        if (!_isFileBlock(block)) continue;
         final bid = block.maybeString('bid');
         if (bid != null && !result.contains(bid)) {
           await BlockCache.instance.put(bid, block);
           result.add(bid);
         }
       }
-      if (items.length < limit) break;
+      if (items.length < _linkPageSize) break;
       page++;
     }
     return result;
+  }
+
+  Future<List<BlockModel>> _getFileBlocksByMain(
+    String collectionBid, {
+    required int page,
+    required int limit,
+    String? tag,
+  }) async {
+    final start = (page - 1) * limit;
+    final end = start + limit;
+    final firstApiPage = start ~/ _linkPageSize + 1;
+    final lastApiPage = (end - 1) ~/ _linkPageSize + 1;
+    final blocks = <BlockModel>[];
+
+    for (var apiPage = firstApiPage; apiPage <= lastApiPage; apiPage++) {
+      final response = await _api.getLinksByMain(
+        bid: collectionBid,
+        page: apiPage,
+        limit: _linkPageSize,
+        model: _fileModelId,
+        tag: tag,
+        order: 'desc',
+      );
+      final pageBlocks = _extractFileBlocks(response);
+      blocks.addAll(pageBlocks);
+      if (pageBlocks.length < _linkPageSize) break;
+    }
+
+    final offset = start % _linkPageSize;
+    if (offset >= blocks.length) return [];
+    final sliceEnd = (offset + limit).clamp(0, blocks.length);
+    return blocks.sublist(offset, sliceEnd);
   }
 
   List<String> _uniqueBids(Iterable<String> bids) {

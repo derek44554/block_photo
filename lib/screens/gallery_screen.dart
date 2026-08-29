@@ -19,6 +19,8 @@ import 'settings_screen.dart';
 import 'setup_screen.dart';
 import 'upload_screen.dart';
 
+const _galleryPageSize = 40;
+
 class GalleryScreen extends StatefulWidget {
   const GalleryScreen({super.key});
 
@@ -62,6 +64,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   // macOS 右侧区域内部详情页状态（保持左侧导航固定）
   int? _macDetailInitialIndex;
+  bool _macSettingsOpen = false;
   final GlobalKey<NavigatorState> _macPaneNavigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -161,7 +164,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           final blocks = await service.getLocalBlocks(
             bids: _allBids,
             page: 1,
-            limit: 40,
+            limit: _galleryPageSize,
           );
           if (!mounted || serial != _querySerial) return;
           final photos = blocks.map(PhotoItem.fromBlock).toList();
@@ -170,7 +173,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               ..clear()
               ..addAll(photos);
             _page = 2;
-            _hasMore = photos.length == 40;
+            _hasMore = _hasMoreLocalBids() || _syncing;
             _loading = false;
           });
           // 预加载第一页图片到内存
@@ -191,14 +194,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
       final blocks = await service.getLocalBlocks(
         bids: _allBids,
         page: _page,
-        limit: 40,
+        limit: _galleryPageSize,
       );
       if (!mounted || serial != _querySerial) return;
       final photos = blocks.map(PhotoItem.fromBlock).toList();
       setState(() {
         _photos.addAll(photos);
         _page++;
-        _hasMore = photos.length == 40;
+        _hasMore = _hasMoreLocalBids() || _syncing;
       });
     } catch (e) {
       if (mounted && serial == _querySerial) {
@@ -232,7 +235,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         collectionBid: collectionBid,
         tag: tag,
         page: _page,
-        limit: 40,
+        limit: _galleryPageSize,
       );
       if (!mounted || serial != _querySerial) return;
       final photos = response.map(PhotoItem.fromBlock).toList();
@@ -246,7 +249,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           _photos.addAll(photos);
           _page++;
         }
-        _hasMore = photos.length == 40;
+        _hasMore = photos.length == _galleryPageSize;
       });
     } catch (e) {
       if (mounted && serial == _querySerial) {
@@ -292,6 +295,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
     return result;
   }
 
+  bool _hasMoreLocalBids() {
+    final nextStart = (_page - 1) * _galleryPageSize;
+    return nextStart < _allBids.length;
+  }
+
   Future<void> _syncInBackground(
     List<String> collectionBids, {
     String? tag,
@@ -326,7 +334,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       final blocks = await service.getLocalBlocks(
         bids: _allBids,
         page: 1,
-        limit: 40,
+        limit: _galleryPageSize,
       );
       if (!mounted || serial != _querySerial) return;
 
@@ -336,7 +344,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ..clear()
           ..addAll(photos);
         _page = 2;
-        _hasMore = photos.length == 40;
+        _hasMore = _hasMoreLocalBids();
       });
       _preloadImages(_imageService, 0, photos.length);
 
@@ -409,6 +417,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _selectedCollectionIndex = null;
         _selectedTag = null;
         _macDetailInitialIndex = null;
+        _macSettingsOpen = false;
         _photos
           ..clear()
           ..addAll(_allViewPhotos);
@@ -427,6 +436,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _selectedCollectionIndex = index;
       _selectedTag = null;
       _macDetailInitialIndex = null;
+      _macSettingsOpen = false;
       _page = 1;
       _hasMore = true;
       _error = null;
@@ -447,6 +457,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     setState(() {
       _selectedTag = tag;
       _macDetailInitialIndex = null;
+      _macSettingsOpen = false;
       _page = 1;
       _hasMore = true;
       _error = null;
@@ -476,9 +487,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       final paneNavigator = _macPaneNavigatorKey.currentState;
       if (paneNavigator != null) {
         final result = await paneNavigator.push<bool>(
-          MaterialPageRoute(
-            builder: (_) => const UploadScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const UploadScreen()),
         );
         if (result == true && mounted) {
           await _refresh();
@@ -489,9 +498,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => const UploadScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const UploadScreen()),
     );
     if (result == true) {
       await _refresh();
@@ -499,6 +506,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _openSettings() async {
+    if (!kIsWeb && Platform.isMacOS) {
+      if (!mounted) return;
+      setState(() {
+        _macSettingsOpen = true;
+        _macDetailInitialIndex = null;
+      });
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SettingsScreen()),
@@ -733,6 +748,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                 ? _buildNoConnection(isDesktop: true)
                                 : _buildGrid(imageService, openInMacPane: true),
                           ),
+                          if (_macSettingsOpen)
+                            const MaterialPage<void>(
+                              key: ValueKey<String>('mac-pane-settings'),
+                              child: SettingsScreen(),
+                            ),
                           if (_macDetailInitialIndex != null)
                             MaterialPage<int>(
                               key: ValueKey<String>(
@@ -757,6 +777,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                 'mac-pane-detail-',
                               );
                           if (!isDetailPage || _macDetailInitialIndex == null) {
+                            if (page.key ==
+                                const ValueKey<String>('mac-pane-settings')) {
+                              setState(() => _macSettingsOpen = false);
+                              unawaited(_refresh());
+                            }
                             return;
                           }
                           setState(() {
