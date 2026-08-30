@@ -471,6 +471,21 @@ class _GalleryScreenState extends State<GalleryScreen> {
     _loadMore(reset: true);
   }
 
+  void _reorderCollections(int oldIndex, int newIndex) {
+    final provider = context.read<PhotoProvider>();
+    final selectedBid = _selectedCollectionIndex == null
+        ? null
+        : provider.collections[_selectedCollectionIndex!].bid;
+    unawaited(provider.reorderCollection(oldIndex, newIndex));
+    if (selectedBid != null) {
+      setState(() {
+        _selectedCollectionIndex = provider.collections.indexWhere(
+          (collection) => collection.bid == selectedBid,
+        );
+      });
+    }
+  }
+
   String get _currentTitle {
     final provider = context.read<PhotoProvider>();
     if (_selectedCollectionIndex != null &&
@@ -627,6 +642,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               collections: photoProvider.collections,
               selectedIndex: _selectedCollectionIndex,
               onSelect: _selectCollection,
+              onReorder: _reorderCollections,
               onAdd: () {
                 _scaffoldKey.currentState?.closeEndDrawer();
                 _showAddCollectionDialog(context);
@@ -703,6 +719,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         collections: photoProvider.collections,
                         selectedIndex: _selectedCollectionIndex,
                         onSelect: _selectCollection,
+                        onReorder: _reorderCollections,
                         onAdd: () => _showAddCollectionDialog(context),
                         onUpload:
                             connProvider.hasActiveConnection && hasCollections
@@ -1117,6 +1134,7 @@ class _CollectionDrawer extends StatefulWidget {
     required this.collections,
     required this.selectedIndex,
     required this.onSelect,
+    required this.onReorder,
     required this.onAdd,
     this.onUpload,
     required this.onSettings,
@@ -1131,6 +1149,7 @@ class _CollectionDrawer extends StatefulWidget {
   final List<PhotoCollection> collections;
   final int? selectedIndex;
   final void Function(int? index) onSelect;
+  final void Function(int oldIndex, int newIndex) onReorder;
   final VoidCallback onAdd;
   final VoidCallback? onUpload;
   final VoidCallback onSettings;
@@ -1273,9 +1292,11 @@ class _CollectionDrawerState extends State<_CollectionDrawer> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: ReorderableListView.builder(
             padding: const EdgeInsets.only(bottom: 16),
             itemCount: widget.collections.length,
+            buildDefaultDragHandles: false,
+            onReorder: widget.onReorder,
             itemBuilder: (context, i) {
               final col = widget.collections[i];
               final isSelected = widget.selectedIndex == i;
@@ -1283,47 +1304,50 @@ class _CollectionDrawerState extends State<_CollectionDrawer> {
               final hasTags = tags.isNotEmpty;
               final expanded = _isExpanded(col);
 
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _CollectionTile(
-                    icon: Icons.folder_rounded,
-                    label: col.title ?? col.bid.substring(0, 10),
-                    subtitle: col.bid.length > 14
-                        ? '${col.bid.substring(0, 6)}…${col.bid.substring(col.bid.length - 4)}'
-                        : col.bid,
-                    selected: isSelected,
-                    onTap: () => widget.onSelect(i),
-                    onLongPress: () => _showDeleteSheet(context, col),
-                    isDefault: col.isDefault,
-                    trailingWidget: hasTags
-                        ? GestureDetector(
-                            onTap: () => _toggleExpanded(col),
-                            behavior: HitTestBehavior.opaque,
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                expanded
-                                    ? Icons.keyboard_arrow_up_rounded
-                                    : Icons.keyboard_arrow_down_rounded,
-                                size: 18,
-                                color: isSelected
-                                    ? cs.onPrimaryContainer
-                                    : cs.onSurfaceVariant,
+              return ReorderableDelayedDragStartListener(
+                key: ValueKey(col.bid),
+                index: i,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _CollectionTile(
+                      icon: Icons.folder_rounded,
+                      label: col.title ?? col.bid.substring(0, 10),
+                      subtitle: col.bid.length > 14
+                          ? '${col.bid.substring(0, 6)}…${col.bid.substring(col.bid.length - 4)}'
+                          : col.bid,
+                      selected: isSelected,
+                      onTap: () => widget.onSelect(i),
+                      isDefault: col.isDefault,
+                      trailingWidget: hasTags
+                          ? GestureDetector(
+                              onTap: () => _toggleExpanded(col),
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  expanded
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
+                                  size: 18,
+                                  color: isSelected
+                                      ? cs.onPrimaryContainer
+                                      : cs.onSurfaceVariant,
+                                ),
                               ),
-                            ),
-                          )
-                        : null,
-                  ),
-                  if (hasTags && expanded)
-                    ...tags.map(
-                      (tag) => _TagTile(
-                        tag: tag,
-                        selected: widget.selectedTag == tag,
-                        onTap: () => widget.onSelectTag?.call(tag),
-                      ),
+                            )
+                          : null,
                     ),
-                ],
+                    if (hasTags && expanded)
+                      ...tags.map(
+                        (tag) => _TagTile(
+                          tag: tag,
+                          selected: widget.selectedTag == tag,
+                          onTap: () => widget.onSelectTag?.call(tag),
+                        ),
+                      ),
+                  ],
+                ),
               );
             },
           ),

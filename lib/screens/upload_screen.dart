@@ -25,9 +25,20 @@ class UploadScreen extends StatefulWidget {
   State<UploadScreen> createState() => _UploadScreenState();
 }
 
+class _SelectedPhoto {
+  const _SelectedPhoto({
+    required this.file,
+    required this.bytes,
+    required this.meta,
+  });
+
+  final File file;
+  final Uint8List bytes;
+  final FileMeta meta;
+}
+
 class _UploadScreenState extends State<UploadScreen> {
-  File? _selectedFile;
-  Uint8List? _previewBytes;
+  List<_SelectedPhoto> _selectedPhotos = [];
   final _nameController = TextEditingController();
   final _introController = TextEditingController();
   final _tagController = TextEditingController();
@@ -38,10 +49,6 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _uploading = false;
   String _status = '';
 
-  // 从文件提取的元数据
-  DateTime? _photoTime;
-  Map<String, double>? _photoGps;
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -50,7 +57,7 @@ class _UploadScreenState extends State<UploadScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImages() async {
     final connProvider = context.read<ConnectionProvider>();
 
     try {
@@ -65,39 +72,36 @@ class _UploadScreenState extends State<UploadScreen> {
       }
 
       final picker = ImagePicker();
-      final picked = await picker.pickImage(
-        source: ImageSource.gallery,
+      final picked = await picker.pickMultiImage(
         requestFullMetadata: !Platform.isMacOS,
       );
-      if (picked == null) return;
+      if (picked.isEmpty) return;
 
-      // 直接从 XFile 读取字节（Android 上会从原始 URI 读取，保留 EXIF）
-      final bytes = await picked.readAsBytes();
-
-      // 用字节写入临时文件供后续上传使用
-      final file = File(picked.path);
-
-      // XFile.lastModified() 在 Android 上读 content URI 的 DATE_MODIFIED，比文件系统时间准确
-      DateTime? xfileTime;
-      try {
-        xfileTime = await picked.lastModified();
-      } catch (_) {}
-
-      // 提取元数据：直接传字节给解析器，避免文件系统时间被污染
-      final meta = await UploadService(connProvider).extractMetaFromBytes(
-        bytes: bytes,
-        path: picked.path,
-        originalFile: file,
-        fallbackTime: xfileTime,
-      );
+      final photos = <_SelectedPhoto>[];
+      final service = UploadService(connProvider);
+      for (final image in picked) {
+        // 直接从 XFile 读取字节，保留完整 EXIF。
+        final bytes = await image.readAsBytes();
+        final file = File(image.path);
+        DateTime? xfileTime;
+        try {
+          xfileTime = await image.lastModified();
+        } catch (_) {}
+        final meta = await service.extractMetaFromBytes(
+          bytes: bytes,
+          path: image.path,
+          originalFile: file,
+          fallbackTime: xfileTime,
+        );
+        photos.add(_SelectedPhoto(file: file, bytes: bytes, meta: meta));
+      }
 
       setState(() {
-        _selectedFile = file;
-        _previewBytes = bytes;
-        _photoTime = meta.timestamp;
-        _photoGps = meta.gps;
-        if (_nameController.text.isEmpty) {
-          _nameController.text = meta.name;
+        _selectedPhotos = photos;
+        if (photos.length == 1 && _nameController.text.isEmpty) {
+          _nameController.text = photos.first.meta.name;
+        } else if (photos.length > 1) {
+          _nameController.clear();
         }
       });
     } catch (e) {
@@ -106,7 +110,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _upload() async {
-    if (_selectedFile == null) {
+    if (_selectedPhotos.isEmpty) {
       _showSnack('请先选择图片');
       return;
     }
@@ -122,21 +126,30 @@ class _UploadScreenState extends State<UploadScreen> {
 
     try {
       final service = UploadService(context.read<ConnectionProvider>());
-      await service.uploadPhoto(
-        file: _selectedFile!,
-        fileBytes: _previewBytes,
-        collectionBids: _selectedCollectionBids.toList(),
-        name: _nameController.text.trim(),
-        intro: _introController.text.trim(),
-        tags: _tags,
-        permissionLevel: _permissionLevel,
-        encrypt: _encrypt,
-        onStatus: (s) {
-          if (mounted) setState(() => _status = s);
-        },
-      );
+      for (var i = 0; i < _selectedPhotos.length; i++) {
+        final photo = _selectedPhotos[i];
+        await service.uploadPhoto(
+          file: photo.file,
+          fileBytes: photo.bytes,
+          collectionBids: _selectedCollectionBids.toList(),
+          name: _selectedPhotos.length == 1
+              ? _nameController.text.trim()
+              : photo.meta.name,
+          intro: _introController.text.trim(),
+          tags: _tags,
+          permissionLevel: _permissionLevel,
+          encrypt: _encrypt,
+          onStatus: (s) {
+            if (mounted) {
+              setState(
+                () => _status = '第 ${i + 1}/${_selectedPhotos.length} 张：$s',
+              );
+            }
+          },
+        );
+      }
       if (!mounted) return;
-      _showSnack('上传成功');
+      _showSnack('成功上传 ${_selectedPhotos.length} 张图片');
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -333,7 +346,9 @@ class _UploadScreenState extends State<UploadScreen> {
             )
           else
             TextButton(
-              onPressed: _selectedFile != null && _selectedCollectionBids.isNotEmpty
+              onPressed:
+                  _selectedPhotos.isNotEmpty &&
+                      _selectedCollectionBids.isNotEmpty
                   ? _upload
                   : null,
               child: const Text('上传'),
@@ -345,28 +360,39 @@ class _UploadScreenState extends State<UploadScreen> {
         children: [
           // 图片预览 / 选择区域
           GestureDetector(
-            onTap: _uploading ? null : _pickImage,
+            onTap: _uploading ? null : _pickImages,
             child: Container(
               height: 220,
               decoration: BoxDecoration(
                 color: cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _selectedFile == null
+                  color: _selectedPhotos.isEmpty
                       ? cs.outlineVariant
                       : cs.primary.withValues(alpha: 0.4),
-                  width: _selectedFile == null ? 1.5 : 2,
+                  width: _selectedPhotos.isEmpty ? 1.5 : 2,
                 ),
               ),
-              child: _previewBytes != null
+              child: _selectedPhotos.isNotEmpty
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.memory(
-                        _previewBytes!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        cacheWidth: previewCacheWidth,
-                        filterQuality: FilterQuality.medium,
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(4),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: _selectedPhotos.length == 1 ? 1 : 3,
+                          crossAxisSpacing: 4,
+                          mainAxisSpacing: 4,
+                          mainAxisExtent: _selectedPhotos.length == 1
+                              ? 212
+                              : 104,
+                        ),
+                        itemCount: _selectedPhotos.length,
+                        itemBuilder: (_, index) => Image.memory(
+                          _selectedPhotos[index].bytes,
+                          fit: BoxFit.cover,
+                          cacheWidth: previewCacheWidth,
+                          filterQuality: FilterQuality.medium,
+                        ),
                       ),
                     )
                   : Column(
@@ -379,7 +405,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '点击选择图片',
+                          '点击选择一张或多张图片',
                           style: TextStyle(color: cs.onSurfaceVariant),
                         ),
                       ],
@@ -388,22 +414,27 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
           const SizedBox(height: 20),
 
-          // 时间 & GPS 元数据（选图后显示）
-          if (_photoTime != null || _photoGps != null) ...[
-            if (_photoTime != null)
-              _MetaInfoRow(
-                icon: Icons.access_time_rounded,
-                label: '时间',
-                value: _formatDateTime(_photoTime!),
-              ),
-            if (_photoGps != null)
+          // 时间 & GPS 元数据（单张选图时显示）
+          if (_selectedPhotos.length == 1) ...[
+            _MetaInfoRow(
+              icon: Icons.access_time_rounded,
+              label: '时间',
+              value: _formatDateTime(_selectedPhotos.first.meta.timestamp),
+            ),
+            if (_selectedPhotos.first.meta.gps != null)
               _MetaInfoRow(
                 icon: Icons.location_on_rounded,
                 label: 'GPS',
                 value:
-                    '${_photoGps!['latitude']!.toStringAsFixed(6)}, '
-                    '${_photoGps!['longitude']!.toStringAsFixed(6)}',
+                    '${_selectedPhotos.first.meta.gps!['latitude']!.toStringAsFixed(6)}, '
+                    '${_selectedPhotos.first.meta.gps!['longitude']!.toStringAsFixed(6)}',
               ),
+            const SizedBox(height: 12),
+          ] else if (_selectedPhotos.isNotEmpty) ...[
+            Text(
+              '已选择 ${_selectedPhotos.length} 张图片，每张图片会创建独立的 Block 和 BID',
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
             const SizedBox(height: 12),
           ],
 
@@ -412,13 +443,16 @@ class _UploadScreenState extends State<UploadScreen> {
             controller: _nameController,
             enabled: !_uploading,
             decoration: InputDecoration(
-              labelText: '图片名称',
+              labelText: _selectedPhotos.length > 1
+                  ? '图片名称（多选时使用各自文件名）'
+                  : '图片名称',
               hintText: '可选，默认使用文件名',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               prefixIcon: const Icon(Icons.title_rounded),
             ),
+            readOnly: _selectedPhotos.length > 1,
           ),
           const SizedBox(height: 12),
 

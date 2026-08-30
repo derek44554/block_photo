@@ -67,6 +67,16 @@ class PhotoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> reorderCollection(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex--;
+    final reordered = [..._collections];
+    final collection = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, collection);
+    _collections = reordered;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> toggleAlbum(String bid, bool isAlbum) async {
     _collections = _collections
         .map((c) => c.bid == bid ? c.copyWith(isAlbum: isAlbum) : c)
